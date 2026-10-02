@@ -12,8 +12,8 @@ to the spec's user stories. Each code task is one PR with its tests; "repo" says
 
 | Id | Task | Repo | Story | Depends on |
 |---|---|---|---|---|
-| 001-T001 | Write and accept the MIP for #1, taking this spec as its design input; it states the Phase 2 exception and the monthly cost | marola (umbrella) | all | — |
-| 001-T002 | ~~Decide R2~~ (done 2026-10-02: `kyo-sql`). Decide the FR-018 retention default; record both in the MIP | marola | all | 001-T001 |
+| 001-T001 | Accept [MIP-0075](https://github.com/marola-dev/marola/blob/claude/zen-brown-d4e27k/docs/MIPs/MIP-0075-water-quality-store-supabase.md) (written 2026-10-02, Draft); its §11 holds the Phase 2 exception, the plan and the retention questions | marola (umbrella) | all | — |
+| 001-T002 | ~~Decide R2~~ (done 2026-10-02: `kyo-sql`). Decide the FR-018 retention default; record both in MIP-0075 | marola | all | 001-T001 |
 | 001-T003 | Create the Supabase project (free or Pro), run nothing yet; confirm the cost | — (person) | all | 001-T001 |
 | 001-T004 | File the tasks below as issues and label the first ones `agent-ready` | marola-app, marola-oods | all | 001-T001 |
 

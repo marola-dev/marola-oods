@@ -1,5 +1,7 @@
 # Research: Beach persistence in Supabase
 
+The decisions here are summarised in [MIP-0075](https://github.com/marola-dev/marola/blob/claude/zen-brown-d4e27k/docs/MIPs/MIP-0075-water-quality-store-supabase.md); this page keeps the reasoning.
+
 Phase 0 of [plan.md](plan.md). Each entry: the decision, why, and what was rejected. Facts about
 marola's code were read from marola-app at `06280ba` and the umbrella's MIP-0056; facts about
 Kyo and client libraries are #1's, checked on Maven Central 2026-10-02; the schema was run on a
@@ -151,7 +153,7 @@ the next dispatch resumes from `fetch_partition`. At ~1 request/s, SC's backfill
 marola-oods never builds Scala and pulls the pinned `marola-image` (AGENTS.md). MIP-0056 kept
 `oods` out of the runtime image and ran it with `sbt oods/run` in marola's own workflow; after the
 polyrepo split that workflow lives here (#1 §2), so the code has to arrive as an image.
-**Decision** [for the MIP]: the `oods` module's assembly ships in the same JVM image as a second
+**Decision** (MIP-0075 §5.1): the `oods` module's assembly ships in the same JVM image as a second
 main class (`marola.oods.Main`), run with `--entrypoint`; one pin, one digest. The native-image
 binary the site uses never loads it. Rejected: a second image (two pins to bump together).
 

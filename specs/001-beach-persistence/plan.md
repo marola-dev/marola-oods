@@ -1,7 +1,7 @@
 # Implementation plan: Beach persistence in Supabase
 
 **Branch**: `001-beach-persistence` | **Date**: 2026-10-02 | **Spec**: [spec.md](spec.md)
-**Input**: the spec, marola-dev/marola-oods#1, MIP-0056 §5.2–§5.6, marola-app at `06280ba`.
+**MIP**: [MIP-0075](https://github.com/marola-dev/marola/blob/claude/zen-brown-d4e27k/docs/MIPs/MIP-0075-water-quality-store-supabase.md) | **Input**: the spec, marola-dev/marola-oods#1, MIP-0056 §5.2–§5.6, marola-app at `06280ba`.
 
 ## Summary
 
@@ -103,7 +103,7 @@ the integration tests run the real migrations; this repo holds only the workflow
 
 ## Phases
 
-0. **Gates** (people): cost, phase exception, `agent-ready`, the MIP accepted.
+0. **Gates** (people): cost, phase exception, `agent-ready`, MIP-0075 accepted.
 1. **Schema + store**: migrations, `BeachStore`, Postgres impl, integration suite.
 2. **SC end to end (MVP)**: planner, throttle, IMA/SC adapter, `oods load --state SC`, workflow
    with SC only. Independently shippable: SC needs no proxy.

@@ -2,7 +2,7 @@
 
 **Feature branch**: `001-beach-persistence`
 **Created**: 2026-10-02
-**Status**: Draft (input to the MIP that marola-dev/marola-oods#1 requires before any code)
+**Status**: Draft, the detailed design behind [MIP-0075](https://github.com/marola-dev/marola/blob/claude/zen-brown-d4e27k/docs/MIPs/MIP-0075-water-quality-store-supabase.md) (Draft), the MIP marola-dev/marola-oods#1 requires before any code
 **Input**: "Bulk-import some states' beach and water-quality data into Supabase, so marola stops
 querying the agencies on every build. The ETL runs on the marola-app stack (Scala 3, Kyo, same
 discipline) as a GitHub Actions job that handles one state at a time, throttled to the size of

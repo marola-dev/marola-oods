@@ -17,8 +17,8 @@ Tested on a real Postgres in a container; never on SQLite (research R1).
 | | |
 |---|---|
 | **Language** | Scala 3.9.0 on JDK 25 (marola-app's `build.sbt`) |
-| **Effects** | Kyo 1.0.0-RC5 today; RC7 if `kyo-sql` is chosen (R2) |
-| **Primary dependencies** | `kyo-sql-postgres` or `org.postgresql:postgresql` (R2); PDFBox (exists); marola-app `local`'s parsers and `Http` |
+| **Effects** | Kyo 1.0.0-RC7 (bumped from RC5 for `kyo-sql`, R2) |
+| **Primary dependencies** | `kyo-sql` + `kyo-sql-postgres` 1.0.0-RC7 (R2); PDFBox (exists); marola-app `local`'s parsers and `Http` |
 | **Storage** | Supabase Postgres 15+/17, schema `oods`, via Supavisor session mode (5432) |
 | **Testing** | munit; hand-written doubles; Testcontainers (`testcontainers-scala-munit`, `-postgresql`) with `supabase/postgres:<tag>`; [contracts/schema-check.sql](contracts/schema-check.sql) |
 | **Target** | `ubuntu-latest` GitHub runner, the pinned JVM image (`marola-image`) |
@@ -82,7 +82,7 @@ marola-app/
     │   ├── adapter/IneaRjAdapter.scala    IneaPdfParser + curated coords
     │   ├── adapter/InemaBaAdapter.scala   InemaPdfParser + curated coords
     │   ├── store/BeachStore.scala         trait: upsertPoints, upsertSamples, partitions, runs, retain
-    │   ├── store/PostgresBeachStore.scala
+    │   ├── store/PostgresBeachStore.scala  kyo-sql-postgres
     │   ├── store/Migrations.scala
     │   └── Load.scala                     wires plan → fetch → parse → store → fetch_run
     └── test/scala/marola/oods/

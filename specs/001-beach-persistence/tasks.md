@@ -13,7 +13,7 @@ to the spec's user stories. Each code task is one PR with its tests; "repo" says
 | Id | Task | Repo | Story | Depends on |
 |---|---|---|---|---|
 | 001-T001 | Write and accept the MIP for #1, taking this spec as its design input; it states the Phase 2 exception and the monthly cost | marola (umbrella) | all | — |
-| 001-T002 | Decide R2 (`kyo-sql` with the RC7 bump, or pgjdbc) and the FR-018 retention default; record in the MIP | marola | all | 001-T001 |
+| 001-T002 | ~~Decide R2~~ (done 2026-10-02: `kyo-sql`). Decide the FR-018 retention default; record both in the MIP | marola | all | 001-T001 |
 | 001-T003 | Create the Supabase project (free or Pro), run nothing yet; confirm the cost | — (person) | all | 001-T001 |
 | 001-T004 | File the tasks below as issues and label the first ones `agent-ready` | marola-app, marola-oods | all | 001-T001 |
 
@@ -21,12 +21,12 @@ to the spec's user stories. Each code task is one PR with its tests; "repo" says
 
 | Id | Task | Repo | Story | Depends on |
 |---|---|---|---|---|
-| 001-T005 | If R2 = `kyo-sql`: bump Kyo RC5 → RC7 across the build, alone, full gate green | marola-app | — | 001-T002 |
+| 001-T005 | Bump Kyo RC5 → RC7 across the build, alone, full gate green. **Done** on marola-app branch `claude/zen-brown-d4e27k`: 281/281 tests, scalafmt and scalafix clean; open a PR, and its CI's native-image build is the remaining check | marola-app | — | — |
 | 001-T006 | `oods` sbt module (`dependsOn(local)`), `cli dependsOn(oods)`; empty `marola.oods.Main` with usage and exit code 2 | marola-app | — | 001-T004 |
 | 001-T007 [P] | `model/`: `PointRow`, `SampleRow`, every enum with `label`/`fromLabel` (data-model.md table), opaque `Uf`, `IbgeCode`, `LatLon` with smart constructors; a test over each enum's `values`: `fromLabel(label(x)) == Some(x)` | marola-app | US1, US2 | 001-T006 |
 | 001-T008 [P] | `V001__beach_store.sql` = contracts/schema.sql; `Migrations` runner with `schema_version` and checksum check (exit 3); `oods migrate` | marola-app | US1 | 001-T006 |
 | 001-T009 | `BeachStore` trait (`upsertPoints`, `upsertSamples`, `recordPartition`, `knownPartitions`, `openRun`, `closeRun`, `retain`) + `RecordingBeachStore` test double | marola-app | US1, US5 | 001-T007 |
-| 001-T010 | `PostgresBeachStore` (R2's client): batch upserts with the `is distinct from` guard, one transaction per partition batch, redacted URL type, Supavisor session mode | marola-app | US1, US3 | 001-T005, 001-T008, 001-T009 |
+| 001-T010 | `PostgresBeachStore` on `kyo-sql-postgres` (API checked against the RC7 jar): batch upserts with the `is distinct from` guard, one transaction per partition batch, redacted URL type, Supavisor session mode | marola-app | US1, US3 | 001-T005, 001-T008, 001-T009 |
 | 001-T011 | Testcontainers harness: `supabase/postgres:<pinned tag>`, migrations applied by `Migrations`, tag `Integration`, excluded from `just test`; a CI job running it | marola-app | — | 001-T008 |
 | 001-T012 | `PostgresBeachStoreIT`: every case of contracts/schema-check.sql through `PostgresBeachStore` (idempotent upsert, NULL-time key, water columns refused for the ETL role, bounding box, fitness ratio incl. all-unknown) | marola-app | US1, US2, US3 | 001-T010, 001-T011 |
 
@@ -73,7 +73,7 @@ second run writes nothing.
 ## Dependencies in short
 
 ```text
-T001 → T002 → T005 ┐
+T005 (done) ───────┐
 T001 → T004 → T006 → T007 → T009 → T010 → T012
                   └→ T008 ─────────┘   └→ T016 → T017
        T013, T014 → T015 ─────────────────┘  └→ T019 → T020 → T022

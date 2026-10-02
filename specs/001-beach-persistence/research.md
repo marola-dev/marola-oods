@@ -24,8 +24,8 @@ Settings → Infrastructure), so a test never passes on a version the store does
 `authenticated`, `service_role`), which only the RLS checks need.
 
 **Why not SQLite**: the tests would pass against a database the store never runs.
-- The Postgres drivers on the table (`kyo-sql-postgres`, Skunk, pgjdbc) speak the Postgres wire
-  protocol; none of them can open SQLite, so the code under test would not be the code shipped.
+- `kyo-sql-postgres` (R2), like every alternative weighed (Skunk, pgjdbc), speaks the Postgres
+  wire protocol only; none of them can open SQLite, so the code under test would not be the code shipped.
 - The schema depends on Postgres-only features: `unique nulls not distinct` (the sample key with no
   time), `distinct on` (latest per point), `count(*) filter`, `security_invoker` views, column
   grants, RLS policies, `timestamptz`, regex checks, `on conflict … do update … where`.
@@ -35,26 +35,37 @@ DuckDB, already in MIP-0056's plan for Parquet, is the same story: close dialect
 
 ## R2. The Scala Postgres client
 
-Supabase has no Scala SDK; the app is Kyo 1.0.0-RC5 without cats-effect (#1 §2 table).
+Supabase has no Scala SDK; the app runs Kyo without cats-effect (#1 §2 table).
 
-**Decision** [NEEDS CLARIFICATION, recommendation given]: `kyo-sql` + `kyo-sql-postgres`, behind a
-`BeachStore` trait, with the Kyo RC5 → RC7 bump landing first as its own marola-app PR.
-**Fallback**: the plain Postgres JDBC driver (`org.postgresql:postgresql`) wrapped in
-`Sync.defer`, behind the same trait.
+**Decision** (maintainer, 2026-10-02): `kyo-sql` + `kyo-sql-postgres` 1.0.0-RC7, behind a
+`BeachStore` trait. The Kyo RC5 → RC7 bump that it needs is done on its own, first: marola-app
+branch `claude/zen-brown-d4e27k` (`build: bump Kyo 1.0.0-RC5 → 1.0.0-RC7`). It needed no code
+change, and all 281 tests, scalafmt and scalafix pass. The GraalVM native-image build is left to
+marola-app's CI.
 
-- Both keep one effect system in the module, which is the "same discipline" ask; callers depend
-  on the trait (`.claude/rules/scala.md`), so swapping one for the other later touches one class.
-- `kyo-sql` is Kyo-native and typed, but new (first published in RC6). The bump touches every
-  module; it must pass marola-app's full gate on its own before this spec builds on it.
-- pgjdbc is boring and has GraalVM metadata, and needs no bump. It costs hand-written row mapping.
-- Skunk (#1's suggested fallback) is rejected for this module: it reaches Kyo only through
-  `kyo-cats`, pinned at RC5, so it needs a separate cats-effect entrypoint, two effect systems in
-  one module. doobie: the same caveat, plus Hikari.
-- PostgREST over HTTP: rejected for writes. It needs the schema exposed to the API and a
-  `service_role` key in CI; the batch upserts and transactions here are SQL's job.
+What the RC7 jars hold (read from Maven Central, 2026-10-02):
+- `kyo-sql` depends on `kyo-core`, `kyo-schema-json` and `kyo-net` only, built for Scala 3.9.0, the
+  app's version. No JDBC, no Netty, no cats-effect.
+- `kyo-sql-postgres` is a native wire-protocol client (`PostgresClient`, `PostgresConfig`) with
+  TLS (`SslRequest`, via `kyo-net`'s `NetTlsConfig`), SCRAM authentication (Supabase's default),
+  prepared statements, `COPY` and a connection pool. Clear-text passwords without TLS are refused
+  (`SqlConnectionClearPasswordRequiresTlsException`).
+- It is pre-1.0 and new (first published in RC6). Per `.claude/rules/scala.md`, the API is checked
+  against the jar (`javap`, the jar-verifier agent), not against getkyo.io's latest docs.
 
-Whichever wins, it connects through **Supavisor session mode, port 5432**: both prepare
-statements, which transaction mode (6543) does not support (#1, Supavisor FAQ).
+Alternatives, rejected:
+- Plain Postgres JDBC (`org.postgresql:postgresql`) in `Sync.defer`. It needs no bump and has
+  GraalVM metadata, but means hand-written row mapping. It stays the fallback if `kyo-sql` blocks
+  on something the store needs. Callers depend on the trait (`.claude/rules/scala.md`), so a swap
+  touches one class.
+- Skunk, #1's suggested fallback. It reaches Kyo only through `kyo-cats`, pinned at RC5, so it
+  needs a separate cats-effect entrypoint: two effect systems in one module. doobie has the same
+  caveat, plus Hikari.
+- PostgREST over HTTP, for writes. It needs the schema exposed to the API and a `service_role` key
+  in CI, and the batch upserts and transactions here are SQL's job.
+
+It connects through **Supavisor session mode, port 5432**, because it prepares statements, which
+transaction mode (6543) does not support (#1, Supavisor FAQ).
 
 ## R3. Column names: MIP-0056's, with the Praia Limpa field mapped
 

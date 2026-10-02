@@ -250,7 +250,7 @@ two `fetch_run` rows.
   MIP to scope it as an explicit exception (#1 "Blocked by"). [NEEDS CLARIFICATION]
 - Code lands in marola-app's `oods` module (MIP-0070 §5.3); the workflow lands here and runs the
   pinned `marola-image`, never building Scala.
-- The Scala Postgres client is `kyo-sql-postgres` (needs Kyo RC5 → RC7) or Skunk in its own
-  entrypoint; see [research.md](research.md) R2. [NEEDS CLARIFICATION: which.]
+- The Scala Postgres client is `kyo-sql` + `kyo-sql-postgres` 1.0.0-RC7 (decided 2026-10-02); the
+  app's Kyo bump to RC7 is done; see [research.md](research.md) R2.
 - Agencies publish no licence; storing in a private database is fine, publishing it is #1's open
   question, not this spec's.

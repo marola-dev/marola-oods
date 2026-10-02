@@ -1,0 +1,25 @@
+name: PR
+
+on:
+  pull_request:
+    # labeled/unlabeled only matter for task-partial, which pr-body turns into Part of #N.
+    types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled, closed]
+
+permissions:
+  contents: read
+
+jobs:
+  body:
+    if: github.event.action != 'closed'
+    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.2.2
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+      devkit-ref: v0.2.2
+
+  short-circuit:
+    if: github.event.action == 'closed' && !github.event.pull_request.merged
+    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.2.2
+    permissions:
+      actions: write

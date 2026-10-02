@@ -1,0 +1,31 @@
+name: CI
+
+# The devkit's reusable workflows at the pinned tag (MIP-0070 §5.6). Bump the tag here, the
+# devkit-ref inputs and flake.nix's input together.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.2.2
+    with:
+      shellcheck-files: scripts/*.sh
+      extra-commands: |
+        scripts/oods-tree-check.sh
+        scripts/oods-tree-check.sh --self-test
+        scripts/app-image.sh --self-test
+
+  agents:
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.2.2
+    with:
+      devkit-ref: v0.2.2

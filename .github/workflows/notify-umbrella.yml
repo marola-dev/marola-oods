@@ -1,0 +1,17 @@
+name: notify umbrella
+
+# The umbrella aggregates this repo's README.md and docs/ into docs.marola.dev (MIP-0070 §5.5).
+# No token set: a notice, and the umbrella's daily cron picks the change up.
+
+on:
+  push:
+    branches: [main]
+    paths: [README.md, "docs/**"]
+
+permissions: {}
+
+jobs:
+  notify:
+    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.2.2
+    secrets:
+      token: ${{ secrets.MAROLA_CROSS_REPO_PAT }}

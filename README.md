@@ -17,6 +17,15 @@ live in [marola-app](https://github.com/marola-dev/marola-app), as its `oods/` s
 from before it. The backfill recreates here, in this repo, once that ingest code lands. This repo
 holds only the data the ingest code produces: no sbt, no Python, no build.
 
+## Try it
+
+```bash
+nix develop               # the lint tools and the devkit's tools; links .devkit
+just quality              # every gate CI runs, plus docs-lint
+just oods-tree-check      # the shape check alone
+just app-image            # print the pinned app image
+```
+
 ## Repo map — planned (MIP-0056)
 
 ```
@@ -32,15 +41,6 @@ data/oods/
     points.parquet
     samples/year=<year>/samples.parquet
   latest/<source>.json               the app's opt-in water-cache fallback (MIP-0056 §5.5)
-```
-
-## Try it
-
-```bash
-nix develop               # the lint tools and the devkit's tools; links .devkit
-just quality              # every gate CI runs, plus docs-lint
-just oods-tree-check      # the shape check alone
-just app-image            # print the pinned app image
 ```
 
 ## Contracts

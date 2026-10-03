@@ -6,7 +6,7 @@
     flake-utils.url = "github:numtide/flake-utils";
     # Tools, the just module and the lint toolchain. Bump with .github/workflows/*.yml's @tag.
     marola-devkit = {
-      url = "github:marola-dev/marola-devkit/v0.2.4";
+      url = "github:marola-dev/marola-devkit/v0.3.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };

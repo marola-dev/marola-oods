@@ -3,7 +3,7 @@
 # specifies (raw text per source, a manifest, derived Parquet), `.gitkeep` aside. This is a shape
 # check only: it does not parse a file's content, only its extension. Real validation — the app's
 # own OODS command reading and checking the data — replaces it once the MIP-0056 ingest stack
-# lands in marola-app (docs/index.md). An empty tree (just `.gitkeep`) passes.
+# lands in marola-app (docs/3-development.md). An empty tree (just `.gitkeep`) passes.
 #
 #   scripts/oods-tree-check.sh [DIR]      # default: data/oods
 #   scripts/oods-tree-check.sh --self-test

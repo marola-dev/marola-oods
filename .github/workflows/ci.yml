@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   static:
-    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.3.0
     with:
       shellcheck-files: scripts/*.sh
       extra-commands: |
@@ -26,6 +26,6 @@ jobs:
         scripts/app-image.sh --self-test
 
   agents:
-    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.3.0
     with:
-      devkit-ref: v0.2.4
+      devkit-ref: v0.3.0

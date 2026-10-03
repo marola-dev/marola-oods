@@ -15,17 +15,18 @@ oods-tree-check:
 app-image:
     scripts/app-image.sh
 
-# Every gate CI runs.
+# Every gate CI runs, plus docs-lint (MIP-0074 §7; no devkit workflow runs it in CI yet).
 quality:
     #!/usr/bin/env bash
     set -euo pipefail
-    for tool in shellcheck actionlint agents-check; do command -v "$tool" >/dev/null || { echo "quality: $tool not installed — run inside 'nix develop'" >&2; exit 1; }; done
+    for tool in shellcheck actionlint agents-check docs-lint; do command -v "$tool" >/dev/null || { echo "quality: $tool not installed — run inside 'nix develop'" >&2; exit 1; }; done
     shellcheck --severity=error scripts/*.sh
     actionlint
     scripts/oods-tree-check.sh
     scripts/oods-tree-check.sh --self-test
     scripts/app-image.sh --self-test
     agents-check
+    docs-lint
 
 # The devkit hooks' contract: fast checks at commit, the full gate at push.
 precommit:

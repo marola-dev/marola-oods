@@ -54,6 +54,16 @@ data/oods/
 - **Pinned by:** no repo pins a version of this one yet; the umbrella's submodule pointer tracks
   its `main`, and marola-app's `oods-ingest.yml` commits here without pinning anything.
 
+## Gemini review
+
+Request the reviewer `marola-dev/gemini` on a pull request (sidebar → Reviewers, or
+`gh pr edit <N> --add-reviewer marola-dev/gemini`). `marola-gemini-bot` posts one review with at
+most 10 inline comments tagged `[high]`/`[medium]`/`[low]`, then pushes one commit with the fixes
+it is sure of, after `bash scripts/oods-tree-check.sh` passes. Request it again after new commits for a fresh review. It runs only when
+asked, skips pull requests from forks and never edits `.github/`. `.github/workflows/gemini.yml`
+calls the devkit's [`gemini-review`](https://github.com/marola-dev/marola-devkit/blob/main/docs/4-reference_workflows.md#gemini-review)
+workflow.
+
 ## Docs and AGENTS.md
 
 - [docs/3-development.md](docs/3-development.md): what `oods-check.yml` checks today versus once

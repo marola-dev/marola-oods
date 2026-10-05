@@ -59,6 +59,23 @@ just app-image            # print the pinned app image
 The devkit's git hooks (`core.hooksPath .devkit/.githooks`, set by the dev shell) run
 `just precommit` and `just prepush`.
 
+## Docs
+
+`README.md` is the landing: what this repo is, its status, how to try it, the repo map and its
+contracts. There is no `docs/index.md`. `docs/` holds numbered pages (MIP-0074 §5.2); today just
+`docs/3-development.md` (what `oods-check.yml` checks and how to bump the pinned image) — a repo
+this small adds `1-design`/`2-libraries`/`4-reference` only if it grows into them.
+
+- **Links**: relative within `docs/` and from the README into `docs/`, written to work on GitHub.
+  A file outside `docs/` (`AGENTS.md`, a script) is linked by its
+  `https://github.com/marola-dev/marola-oods/blob/main/…` URL; another repo or the umbrella by
+  `https://docs.marola.dev/…`.
+- **Recipes**: a doc names only this repo's and the devkit's recipes. Any other carries the
+  checkout marker: "in a marola-<name> checkout" in the same sentence, or
+  `# in a marola-<name> checkout` as a fence's first line.
+- `just quality` runs `docs-lint` (MIP-0074 §7): it fails on a foreign recipe without the marker,
+  a relative link that leaves the repo, and `docs/index.md`.
+
 ## Cost & deployment safety (hard rule)
 
 As in the umbrella. Nothing here provisions or deploys a paid resource: `oods-check.yml` pulls the

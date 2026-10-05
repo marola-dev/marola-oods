@@ -4,7 +4,7 @@ name: oods-check
 # depends on actually runs, then checks data/oods/ against the file formats MIP-0056 specifies.
 # Real validation — the app's own OODS command reading and checking the data, not just its file
 # extensions — replaces the smoke command and the shape check once the MIP-0056 ingest stack lands
-# in marola-app (docs/index.md). Never writes to this repo: data/ only ever changes through
+# in marola-app (docs/3-development.md). Never writes to this repo: data/ only ever changes through
 # marola-app's oods-ingest.yml committing here.
 
 on:

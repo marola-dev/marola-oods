@@ -1,7 +1,7 @@
 -- Executable acceptance checks for views.sql and for oods check (spec US1, US3, US4, FR-013,
 -- FR-017), in DuckDB 1.5, plain or inside a DuckLake. Any failed check stops the script with its message. From this directory:
 --   duckdb -bail :memory: < checks.sql      (it reads views.sql itself; prints "checks: all passed")
--- marola-app's store suites carry the same cases in Scala (tasks.md).
+-- marola-app's store suites carry the same cases in Scala (MIP-0075.tasks rows 4 and 5).
 
 create or replace table point (
   source_id text, point_key text, state text, ibge_code text, municipality text,

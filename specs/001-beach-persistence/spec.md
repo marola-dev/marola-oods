@@ -2,7 +2,7 @@
 
 **Feature branch**: `001-beach-persistence`
 **Created**: 2026-10-02 (rewritten 2026-10-05: Supabase → Backblaze B2, the beach ETL first)
-**Status**: Draft, the detailed design behind [MIP-0075](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md) (Draft, still written for R2; its B2 revision follows this spec), the MIP marola-dev/marola-oods#1 requires before any code
+**Status**: Draft. This spec is what people agree on; the design and the tasks are [MIP-0075](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md) and [its task list](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075.tasks.md), the MIP marola-dev/marola-oods#1 requires before any code
 **Input**: "Bulk-import some states' beach and water-quality data, so marola stops querying the
 sources on every build. The ETL runs on the marola-app stack (Scala 3, Kyo, same discipline) as a
 GitHub Actions job." Revised by the maintainer on 2026-10-05: the store is the Backblaze B2 bucket
@@ -30,7 +30,7 @@ database for per-request queries (MIP-0075 §9), and states beyond SC, RJ and BA
 | Endpoint | `s3.us-east-005.backblazeb2.com`, region `us-east-005` |
 | Free tier | 10 GB stored; downloads free up to 3× the stored data a month |
 | ETL key | read-write, this bucket only: id in the variable `BACKBLAZE_ETL_KEY_ID`, key name in `BACKBLAZE_ETL_KEY_NAME`, secret in `BACKBLAZE_ETL_APP_KEY` (marola-oods, set 2026-10-05) |
-| Format | DuckLake: tables as Parquet files under `lake/`, and a catalog (a DuckDB file) under `catalog/` that records every table, file and snapshot ([research R2](research.md#r2-ducklake-on-b2)) |
+| Format | DuckLake: tables as Parquet files under `lake/`, and a catalog (a DuckDB file) under `catalog/` that records every table, file and snapshot ([MIP-0075 §4.4](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#44-the-table-format-ducklake)) |
 | Client | DuckDB with its `ducklake` and `httpfs` extensions and a `TYPE s3` secret |
 
 ## How marola fetches today
@@ -223,7 +223,7 @@ two `fetch_run` rows.
 
 - A beach renamed in OSM: a new row under the new name, the old one deleted in the same
   transaction. The tables mirror OSM; the lake's snapshots keep the earlier state for 30 days
-  ([research R9](research.md#r9-snapshots-and-the-bucket-lifecycle)).
+  ([MIP-0075 §4.3](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#43-the-store-backblaze-b2)).
 - A monitoring point disappears from the agency's feed: it stays in `point` with
   `last_seen` frozen; never deleted.
 - The agency renames a beach or moves a point: `point_key` is the agency's stable id, so the row
@@ -237,11 +237,11 @@ two `fetch_run` rows.
   `today − 45 days` falls in it (MIP-0056 §5.2).
 - A run killed mid-write: nothing it did is in the uploaded catalog, so readers see the last
   committed snapshot; the Parquet files it wrote are orphans the maintenance step removes
-  ([research R4](research.md#r4-transactions-and-the-catalog-round-trip)).
+  ([MIP-0075 §5.4](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#54-the-etl)).
 - Two jobs at once: they would each upload their own catalog and one would lose the other's
   commits, so every job that writes the lake shares one `concurrency` group and runs alone.
 - The free tier full (10 GB): B2 refuses the upload; the run is `failed` with `StoreFull`, nothing
-  is billed. At the sizes in [research R8](research.md#r8-size-and-throttling) this is three
+  is billed. At the sizes in [MIP-0075 §4.3](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#43-the-store-backblaze-b2) this is three
   orders of magnitude away.
 
 ## Requirements *(mandatory)*
@@ -250,7 +250,7 @@ two `fetch_run` rows.
 
 - **FR-001**: The store MUST be a DuckLake whose data path is
   `s3://br-open-ocean-data-storage/lake/` on `s3.us-east-005.backblazeb2.com`, with its catalog
-  kept as `catalog/oods.ducklake` in the same bucket, laid out as [data-model.md](data-model.md)
+  kept as `catalog/oods.ducklake` in the same bucket, laid out as [MIP-0075 §5.2](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#52-the-layout)
   says. Data inlining is off, so every row lives in a Parquet file in B2, not in the catalog.
 - **FR-002**: The app MUST reach the store only through DuckDB's `ducklake` and `httpfs`
   extensions with a `TYPE s3` secret
@@ -261,7 +261,7 @@ two `fetch_run` rows.
   `trail` in one transaction and export one `BeachSnapshot` v1 JSON, reusing `BeachFinder`,
   `OverpassAccessibilityClient` and `TrailFinder` unchanged.
 - **FR-004**: The beach ETL's areas MUST come from this repo's `etl/areas.json` (id, origin,
-  radius, beach limit), never from marola-site's tree ([research R6](research.md#r6-where-the-beach-etl-gets-its-areas)).
+  radius, beach limit), never from marola-site's tree ([MIP-0075 §5.4](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#54-the-etl)).
 - **FR-005**: Monitoring points MUST carry the Praia Limpa fields in English: `state` (UF, two
   letters, including `DF`), `ibge_code` (seven digits), `municipality`, `point_name`, `beach_name`,
   `location_desc` (REFERENCIA_LOCALIZACAO), `lat`/`lon` (decimal degrees), `first_seen`,
@@ -339,10 +339,10 @@ two `fetch_run` rows.
 - The maintainer created the B2 account (no card), the bucket and the ETL key, and set
   `BACKBLAZE_ETL_APP_KEY` (secret), `BACKBLAZE_ETL_KEY_ID` and `BACKBLAZE_ETL_KEY_NAME`
   (variables) in marola-oods on 2026-10-05. A read-only key for the site build (marola-site) and
-  marola-ml is a later step of the same person ([quickstart](quickstart.md#the-hosted-bucket-a-person-once)).
+  marola-ml is a later step of the same person ([MIP-0075 §5.6](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#56-what-a-person-sets-up-in-backblaze)).
 - The bucket's lifecycle is "Keep all versions" today. With DuckLake, history is the lake's own
   snapshots, so the bucket keeps only the last version of each file
-  ([research R9](research.md#r9-snapshots-and-the-bucket-lifecycle)).
+  ([MIP-0075 §4.3](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#43-the-store-backblaze-b2)).
 - Phase: `docs/PHASES.md` puts a cloud backend in Phase 2. The bucket is free and holds public
   data, but it is still a cloud store; MIP-0075 §11 asks for the scoped exception. [NEEDS
   CLARIFICATION]

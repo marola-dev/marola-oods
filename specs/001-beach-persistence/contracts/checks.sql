@@ -1,5 +1,5 @@
--- Executable acceptance checks for views.sql and for oods check (spec US1, US3, US4, FR-009,
--- FR-017), in DuckDB 1.5. Any failed check stops the script with its message. From this directory:
+-- Executable acceptance checks for views.sql and for oods check (spec US1, US3, US4, FR-013,
+-- FR-017), in DuckDB 1.5, plain or inside a DuckLake. Any failed check stops the script with its message. From this directory:
 --   duckdb -bail :memory: < checks.sql      (it reads views.sql itself; prints "checks: all passed")
 -- marola-app's store suites carry the same cases in Scala (tasks.md).
 
@@ -85,15 +85,15 @@ select case when (select (parking, toilets, lifeguard, trails) from beach_card
 select case when (select count(*) from beach_card where area_id = 'floripa') <> 2
   then error('US1: one card per beach') end;
 
--- FR-009: the content hash is over sorted rows, so the same rows in another order hash the same
--- (a re-run with a reordered answer uploads nothing).
+-- FR-013: fetch_partition's content hash is over sorted rows, so the same rows in another order
+-- hash the same (a re-fetched partition with a reordered answer counts as unchanged).
 create or replace macro rows_hash(t) as table
   select md5(string_agg(r::text, chr(10) order by r::text)) as h from (select t.* as r from query_table(t) t);
 create or replace table beach_shuffled as select * from beach order by random();
 select case when (select h from rows_hash('beach')) <> (select h from rows_hash('beach_shuffled'))
-  then error('FR-009: row order changed the content hash') end;
+  then error('FR-013: row order changed the content hash') end;
 
--- FR-017: what oods check refuses before an upload. Each query must return no row.
+-- FR-017: what oods check refuses before a commit. Each query must return no row.
 select case when exists (
     select 1 from point group by source_id, point_key having count(*) > 1)
   then error('FR-017: duplicate point key') end;

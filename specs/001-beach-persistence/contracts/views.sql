@@ -1,7 +1,6 @@
--- marola's read views over the store, in DuckDB SQL (spec FR-008). They read relations named
--- point, sample, water_position, beach, facility and trail, which the caller binds first: views
--- over read_parquet('s3://br-open-ocean-data-storage/…') in the ETL and the build, a local
--- directory in tests, the fixtures in checks.sql. The same file runs in all three.
+-- marola's read views over the store, in DuckDB SQL (spec FR-008). They read the tables point,
+-- sample, water_position, beach, facility and trail: the DuckLake's on B2, a local lake in tests,
+-- the fixtures in checks.sql. Created inside the lake, they are stored in its catalog.
 
 -- One row per (point, date, time): channel precedence csv > pdf > json > the rest (MIP-0056 §5.3).
 create or replace view sample_dedup as

@@ -1,33 +1,48 @@
-# Data model: the store on Backblaze B2
+# Data model: a DuckLake on Backblaze B2
 
-Everything lives in the bucket `br-open-ocean-data-storage` as Parquet or JSON; nothing is a
-table in a server. [contracts/views.sql](contracts/views.sql) is the read side in DuckDB SQL, and
-[contracts/checks.sql](contracts/checks.sql) its executable acceptance checks. Column-by-column
-mapping to the Praia Limpa dictionary: [research R5](research.md#r5-column-names-mip-0056s-with-the-praia-limpa-field-mapped).
+The store is one DuckLake: tables whose rows live in Parquet files in the bucket
+`br-open-ocean-data-storage`, and a catalog that records every table, file and snapshot. Nothing
+runs between loads. [contracts/views.sql](contracts/views.sql) is the read side in DuckDB SQL,
+stored in the catalog as views, and [contracts/checks.sql](contracts/checks.sql) its executable
+acceptance checks. Column-by-column mapping to the Praia Limpa dictionary:
+[research R5](research.md#r5-column-names-mip-0056s-with-the-praia-limpa-field-mapped).
 
 ## The bucket's tree
 
 ```text
 s3://br-open-ocean-data-storage/
-  beaches/                                     the beach ETL (US1)
-    <area_id>/beaches.parquet
-    <area_id>/facilities.parquet
-    <area_id>/trails.parquet
-    latest/<BeachSnapshot.key>.json            BeachSnapshot v1: the build's one read (MAROLA_BEACHES_DIR)
-    manifest/<area_id>.json                    per object: content hash, rows, written_at
-  water-quality/                               the water-quality ETL (US2–US5)
-    sources.json                               the registry, from etl/sources.json
-    <source_id>/points.parquet
-    <source_id>/samples/year=YYYY/samples.parquet
-    latest/<source_id>.json                    CachedWaterQualityClient v1, water positions joined (MAROLA_WATER_CACHE_DIR)
-    manifest/<source_id>.json                  per partition: content hash, rows, written_at; the resume ledger
-  runs/<job>/<started_at>.json                 one record per run; job = beaches-<area_id> or <source_id>
+  catalog/oods.ducklake                        the DuckLake catalog (a DuckDB file): tables, files, snapshots
+  lake/main/<table>/…/ducklake-<uuid>.parquet  every row; written and named by DuckLake, never by hand
+  lake/main/sample/source_id=<id>/year=YYYY/   sample's partitions
+  exports/beaches/<BeachSnapshot.key>.json     BeachSnapshot v1, one per area: the build's read (MAROLA_BEACHES_DIR)
+  exports/water-quality/<source_id>.json       CachedWaterQualityClient v1, water positions joined (MAROLA_WATER_CACHE_DIR)
 ```
 
-The two ETLs share nothing but the bucket, the store code and `runs/`. `beaches/latest/` is
-named by `BeachSnapshot.key(origin, radius, limit)` (`m27.6000_m48.4800_r30.0_n80.json` for
-floripa), so the file is found by the same key the app already computes, and a changed radius
-cannot silently reuse a stale list.
+The Parquet files under `lake/` are only meaningful through the catalog: an update or delete adds
+a delete file beside the data file, so reading `lake/` with a plain `read_parquet` glob gives
+wrong rows. Readers attach the lake, or read the exports. The exports are rewritten only after the
+catalog upload succeeds, so the build never reads data the catalog does not have.
+
+`exports/beaches/` is named by `BeachSnapshot.key(origin, radius, limit)`
+(`m27.6000_m48.4800_r30.0_n80.json` for floripa), so the file is found by the same key the app
+already computes, and a changed radius cannot silently reuse a stale list.
+
+## Tables
+
+| Table | One row is | Key | Written by | Rows |
+|---|---|---|---|---|
+| `beach` | a named beach in an area | `(area_id, beach_name)` | beach ETL, from `BeachFinder.nearby` | ≤ 80 per area, ~200 |
+| `facility` | a facility kind at a beach, count > 0 | `(area_id, beach_name, facility)` | beach ETL, from `OverpassAccessibilityClient.near` | ~400 |
+| `trail` | a named trail | `(area_id, trail_name)` | beach ETL, from `TrailFinder.nearby` | ~100 |
+| `source` | an agency publication | `source_id` | the ETL, mirrored from `etl/sources.json` | 3 |
+| `point` | a monitoring spot | `(source_id, point_key)` | water-quality ETL | ~685 |
+| `sample` | a result at a point on a date from a channel; partitioned by `source_id`, `year(sampled_on)` | `(source_id, point_key, sampled_on, sampled_at, channel)`, NULL time equal to NULL | water-quality ETL | ~190k with SC history |
+| `water_position` | marola's in-water position | `(source_id, point_key)` | the ETL, mirrored from `etl/water-positions.csv` (git, a person, reviewed PRs) | tens |
+| `fetch_partition` | one unit of fetch work (an IMA/SC beach-year) | `(source_id, partition_key)` | water-quality ETL, after the partition commits | ~3,400 for SC |
+| `fetch_run` | one execution of one area or source | `(job, started_at)` | both ETLs, always, even on failure | +6/week |
+
+DuckLake has no primary keys or checks. `oods check` refuses a batch with a duplicate key or a
+value outside its vocabulary before it is committed (FR-017, `checks.sql`).
 
 ## Beach registry (US1)
 
@@ -72,15 +87,9 @@ erDiagram
   }
 ```
 
-| File | One row is | Key | From | Rows (3 areas) |
-|---|---|---|---|---|
-| `beaches.parquet` | a named beach | `(area_id, beach_name)` | `BeachFinder.nearby` | ≤ 80 per area, ~200 |
-| `facilities.parquet` | a facility kind at a beach, count > 0 | `(area_id, beach_name, facility)` | `OverpassAccessibilityClient.near` | ~400 |
-| `trails.parquet` | a named trail | `(area_id, trail_name)` | `TrailFinder.nearby` | ~100 |
-
 No OSM id is kept: `Beach` has none, and `BeachFinder` already merges node, way and relation by
-name. The registry is a weekly snapshot of OSM, not a history (B2's kept versions are the
-rollback, [research R9](research.md#r9-object-versions-and-the-lifecycle-rule)).
+name. The tables mirror OSM; the lake's snapshots keep the earlier state for 30 days
+([research R9](research.md#r9-snapshots-and-the-bucket-lifecycle)).
 
 ## Water-quality registry (US2–US5)
 
@@ -136,43 +145,33 @@ erDiagram
   }
 ```
 
-| Object | One row is | Key | Written by | Rows (SC+RJ+BA) |
-|---|---|---|---|---|
-| `sources.json` | an agency publication | `source_id` | the ETL, copied from `etl/sources.json` | 3 |
-| `<source>/points.parquet` | a monitoring spot | `(source_id, point_key)` | ETL | ~685 |
-| `<source>/samples/year=YYYY/` | a result at a point on a date from a channel | `(source_id, point_key, sampled_on, sampled_at, channel)`, NULL time equal to NULL | ETL | ~190k with SC history |
-| `etl/water-positions.csv` (git, this repo) | marola's in-water position | `(source_id, point_key)` | a person, in a reviewed PR | tens |
-
-Keys are not enforced by the store: `oods check` refuses a partition with a duplicate key before
-it is uploaded (FR-017, `checks.sql`).
-
 ## Views (`views.sql`)
 
 | View | One row per | Use |
 |---|---|---|
 | `sample_dedup` | (point, date, time) | channel precedence `csv > pdf > json > rest` |
-| `latest_per_point` | point | the newest deduplicated sample; feeds `latest/<source>.json` |
+| `latest_per_point` | point | the newest deduplicated sample; feeds `exports/water-quality/<source>.json` |
 | `point_fitness` | point with samples | `proper_count / classified_count` over the last 5 |
 | `beach_point` | point | the flat, Praia Limpa-shaped record; `where state = 'SC'` |
 | `beach_card` | beach | a beach with its facility counts and trail count |
 
-## Manifest and run record
+## Ledger tables
 
-```json
-{ "version": 1, "job": "ima-sc",
-  "objects": { "samples/year=2025/samples.parquet":
-               { "sha256": "…", "rows": 8132, "immutable": true, "written_at": "2026-10-11T12:21:07Z" } } }
-```
+| `fetch_partition` column | Meaning |
+|---|---|
+| `source_id`, `partition_key` | `ima-sc`, `campeche/2025` |
+| `content_hash` | sha256 over the partition's parsed rows sorted by key, so a re-fetch that changes nothing is recognised |
+| `immutable` | false while the year can still change (current year; the previous one while `today − 45 d` falls in it) |
+| `fetched_at`, `rows` | when, and how many rows it gave |
 
-```json
-{ "version": 1, "job": "beaches-floripa", "mode": "incremental",
-  "started_at": "2026-10-10T12:17:03Z", "finished_at": "2026-10-10T12:18:41Z",
-  "outcome": "unchanged", "requests": 3, "objects_written": 0, "rows": { "beach": 80, "facility": 151, "trail": 37 },
-  "error": null }
-```
+| `fetch_run` column | Meaning |
+|---|---|
+| `job`, `started_at` | `beaches-floripa` or `ima-sc`, and when it began |
+| `mode`, `outcome` | `incremental`/`backfill`; `new_bulletin`, `no_new_bulletin`, `unchanged`, `partial`, `failed` |
+| `finished_at`, `requests`, `rows_changed`, `snapshot_id`, `error`, `key_name` | what it did, the DuckLake snapshot it committed (null when nothing changed), and which key wrote it |
 
-`sha256` is over the object's rows sorted by key, not over the Parquet bytes, so a DuckDB upgrade
-that changes the encoding does not rewrite every partition ([research R4](research.md#r4-write-order-is-the-transaction)).
+DuckLake's own `ducklake_snapshots()` lists every commit with what it changed; `fetch_run` adds
+what DuckLake cannot know: the requests, the outcome and the error.
 
 ## Enumerations (labels are the stored values)
 
@@ -214,12 +213,16 @@ adapter's unit test, with the row that broke them.
 
 ## Lifecycles
 
-- **Beach, facility, trail**: replaced as a whole per area each week when the hash differs. A
-  shrink below half the stored beach count is refused (US1.5).
+- **Beach, facility, trail**: per area, one transaction updates the rows whose columns differ,
+  inserts new keys and deletes keys OSM no longer has; nothing changes when OSM didn't. A shrink
+  below half the stored beach count is refused (US1.5).
 - **Point**: inserted the first time an adapter sees it (`first_seen`); every later sighting moves
   `last_seen` and updates changed agency columns. Never dropped by the ETL.
 - **Sample partition**: `immutable = false` while its year can still change (current year, and the
   previous one while `today − 45 days` falls in it); an immutable partition with a matching hash
-  is skipped without a request. Rewritten whole when its hash changes.
-- **Run record**: written as `failed` with `finished_at = null` at start, overwritten once at the
-  end. A crashed job therefore leaves a `failed` record, never none.
+  is skipped without a request. Its samples are upserted like the beaches.
+- **Fetch run**: inserted as `failed` with `finished_at = null` in its own transaction at start,
+  updated once at the end. The catalog upload runs even when the job fails, so a failed run is
+  on record; only a runner lost mid-job leaves none (GitHub's own run log still shows it).
+- **Snapshots**: kept 30 days, then expired, and the files only they referenced deleted
+  (`ducklake_expire_snapshots`, `ducklake_cleanup_old_files`), as the last step of each job.

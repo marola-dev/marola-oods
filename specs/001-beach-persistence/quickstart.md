@@ -1,70 +1,94 @@
-# Quickstart: a local beach store
+# Quickstart: the store, locally and on B2
 
-Three ways to get a database, from lightest to fullest. All are Postgres; none is SQLite
-([research R1](research.md#r1-testing-a-real-postgres-in-a-container-never-sqlite)). Nothing
-here touches the hosted project or costs anything.
+Nothing in A, C or D touches the hosted bucket. B is the maintainer's one-time smoke test of the
+real bucket, with the ETL key typed into a local DuckDB session, never into a file or a chat.
 
-## A. Just the schema, against any Postgres 15+
-
-```bash
-docker run -d --name oods-pg -e POSTGRES_PASSWORD=postgres -p 54329:5432 postgres:17
-export PGHOST=localhost PGPORT=54329 PGUSER=postgres PGPASSWORD=postgres
-psql -v ON_ERROR_STOP=1 -f specs/001-beach-persistence/contracts/schema.sql \
-                        -f specs/001-beach-persistence/contracts/schema-check.sql
-# → schema-check: all assertions passed
-psql -c "select * from oods.beach_point where state = 'SC'"
-```
-
-Reset: `docker rm -f oods-pg`.
-
-## B. Self-hosted Supabase, the full local stack
-
-Needs Docker and the Supabase CLI (`npx supabase` works without installing).
+## A. The views and checks, in any DuckDB 1.5
 
 ```bash
-mkdir -p .tmp/supabase && cd .tmp/supabase
-npx supabase init
-npx supabase start          # Postgres :54322, API :54321, Studio http://localhost:54323
-psql postgresql://postgres:postgres@localhost:54322/postgres \
-  -v ON_ERROR_STOP=1 -f ../../specs/001-beach-persistence/contracts/schema.sql \
-                     -f ../../specs/001-beach-persistence/contracts/schema-check.sql
-npx supabase stop --no-backup
+nix shell nixpkgs#duckdb      # or brew install duckdb, or pip install duckdb
+cd specs/001-beach-persistence/contracts
+duckdb -bail :memory: < checks.sql
+# → checks: all passed
 ```
 
-Studio shows the `oods` tables. The API does not serve them: `oods` is not in the config's
-`[api] schemas`, which is the point (research R11). Check with
-`curl localhost:54321/rest/v1/beach_point -H "apikey: <anon key from supabase start>"`, which
-must answer with an error, never rows.
+## B. The hosted bucket: smoke test
 
-## C. The ETL against a local database (once marola-app's `oods` lands)
+In a local `duckdb` session, with the key id and application key from the B2 web UI
+(Application Keys); the session secret disappears when DuckDB exits:
+
+```sql
+INSTALL httpfs; LOAD httpfs;
+CREATE SECRET oods (
+  TYPE s3,
+  KEY_ID 'the BACKBLAZE_ETL_KEY_ID value',
+  SECRET 'the application key',
+  ENDPOINT 's3.us-east-005.backblazeb2.com',
+  REGION 'us-east-005',
+  URL_STYLE 'vhost',
+  SCOPE 's3://br-open-ocean-data-storage'
+);
+COPY (SELECT 1 AS ok, now() AS at) TO 's3://br-open-ocean-data-storage/smoke/hello.parquet' (FORMAT parquet);
+SELECT * FROM 's3://br-open-ocean-data-storage/smoke/hello.parquet';
+SELECT * FROM glob('s3://br-open-ocean-data-storage/**');
+```
+
+One row back and the file in the listing means the key, the endpoint and the secret work. Delete
+`smoke/hello.parquet` in the B2 web UI afterwards (DuckDB does not delete objects).
+
+## C. The ETL against a local directory (once marola-app's `oods` lands)
 
 ```bash
-# in marola-app
-export OODS_DATABASE_URL=postgresql://postgres:postgres@localhost:54329/postgres
-sbt "cli/runMain marola.oods.Main migrate"
-sbt "cli/runMain marola.oods.Main load --state SC --dry-run"     # fetch + parse, no DB
-sbt "cli/runMain marola.oods.Main load --state SC"               # incremental
-sbt "cli/runMain marola.oods.Main load --source ima-sc --mode backfill --from-year 2024 --max-minutes 5"
-sbt "cli/runMain marola.oods.Main status --state SC"
+# in a marola-app checkout, with this repo next to it
+export OODS_BUCKET=file://$PWD/.tmp/oods-store
+sbt "cli/runMain marola.oods.Main beaches --areas ../marola-oods/etl/areas.json --area floripa"
+sbt "cli/runMain marola.oods.Main beaches --areas ../marola-oods/etl/areas.json --area floripa"   # again
+sbt "cli/runMain marola.oods.Main load --state SC --sources ../marola-oods/etl/sources.json --dry-run"
+sbt "cli/runMain marola.oods.Main load --state SC --sources ../marola-oods/etl/sources.json"
+sbt "cli/runMain marola.oods.Main status"
 ```
 
-Run the load twice: the second line must read `samples+=0 samples~=0`.
+The second `beaches` run must print `unchanged … written=0`. Read the result with DuckDB:
+
+```sql
+SELECT * FROM read_parquet('.tmp/oods-store/beaches/floripa/beaches.parquet');
+SELECT * FROM read_parquet('.tmp/oods-store/water-quality/*/samples/*/samples.parquet', hive_partitioning = true);
+```
+
+## D. The S3 path against MinIO
+
+```bash
+docker run -d --name oods-minio -p 9000:9000 -e MINIO_ROOT_USER=minio -e MINIO_ROOT_PASSWORD=minio123 \
+  minio/minio server /data
+docker exec oods-minio mc alias set local http://localhost:9000 minio minio123
+docker exec oods-minio mc mb local/br-open-ocean-data-storage
+export OODS_BUCKET=br-open-ocean-data-storage OODS_S3_ENDPOINT=localhost:9000 OODS_S3_REGION=us-east-1 \
+       OODS_S3_URL_STYLE=path OODS_S3_USE_SSL=false OODS_S3_KEY_ID=minio OODS_S3_SECRET=minio123
+# then C's commands, without OODS_BUCKET=file://…
+```
+
+`minio`/`minio123` are a throwaway local container's credentials, not a key. Reset:
+`docker rm -f oods-minio`.
 
 ## Tests
 
 ```bash
-just test                 # unit: adapters on captured bulletins, planner, throttle, LoadSpec
-sbt "oods/testOnly -- --include-tags=Integration"   # Testcontainers + supabase/postgres; needs Docker
+# in a marola-app checkout
+just test                                            # unit: local-directory store, adapters, planner, throttle
+sbt "oods/testOnly -- --include-tags=Integration"    # MinIO in Testcontainers; needs Docker
 ```
 
-In CI the integration suite is its own job on `ubuntu-latest`, where Docker is available.
+## The hosted bucket (a person, once)
 
-## The hosted project (a person, once)
+Done on 2026-10-05: the B2 account (no card), the bucket `br-open-ocean-data-storage` (private,
+encrypted, Object Lock off), the ETL key, `BACKBLAZE_ETL_APP_KEY` (secret) and
+`BACKBLAZE_ETL_KEY_ID`, `BACKBLAZE_ETL_KEY_NAME` (variables) in marola-oods. Still to do:
 
-1. Create the Supabase project; state free or Pro and the monthly cost (constitution I.1).
-2. Leave "Exposed schemas" as `public` only.
-3. Run `oods migrate` once with the dashboard's `postgres` connection string, then set the
-   `marola_etl` password in the dashboard (`alter role marola_etl password …` in the SQL editor).
-4. Add the Actions secret `OODS_DATABASE_URL` in marola-oods: the **session-mode** pooler URL
-   (port 5432), whose user is `marola_etl.<project-ref>`, as Supavisor expects.
-5. Dispatch `beach-etl.yml` with `state=SC`, `mode=backfill`.
+1. Run B's smoke test.
+2. Change the bucket's lifecycle from "Keep all versions" to keep prior versions for 30 days
+   (Buckets → Lifecycle Settings; [research R9](research.md#r9-object-versions-and-the-lifecycle-rule)).
+3. When marola-site reads the store: a second key, **Read Only**, this bucket only, as
+   `BACKBLAZE_READ_APP_KEY` (secret) and `BACKBLAZE_READ_KEY_ID` (variable) in marola-site (and
+   marola-ml if it reads the history). Repeat B with it: the `SELECT`s work and the `COPY` fails
+   with 403.
+4. Dispatch `beach-etl.yml` with `area=all` once the image carries `marola.oods.Main`.

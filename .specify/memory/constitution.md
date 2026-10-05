@@ -8,10 +8,11 @@ spec-kit as prior art, not as a replacement); it does not replace one.
 ## I. Org invariants (AGENTS.md, MIP-0070 §5.1)
 
 1. **Cost and deployment safety.** Nothing provisions or deploys a paid cloud resource without a
-   person's explicit confirmation. Creating a Supabase project, a GCS bucket or a proxy VM is a
-   person's act, even on a free tier.
-2. **No secrets in code.** Connection strings and keys reach CI as GitHub Actions secrets or
-   Workload Identity Federation. `.env.example` holds placeholders only.
+   person's explicit confirmation. Creating a bucket, an application key or a proxy VM is a
+   person's act, even on a free tier (the Backblaze B2 bucket and its ETL key were created by
+   the maintainer on 2026-10-05).
+2. **No secrets in code.** Keys reach CI as GitHub Actions secrets (an application key) and
+   variables (its id); the app reads them from the environment and never logs them. `.env.example` holds placeholders only.
 3. **The agent-ready gate.** An agent starts implementation only on an issue labelled
    `agent-ready`. A spec, plan or task list is design, not implementation.
 4. **Three commit trailers.** `Tested:`, `Cost:`, `Co-Authored-By: Claude <noreply@anthropic.com>`.
@@ -23,7 +24,7 @@ spec-kit as prior art, not as a replacement); it does not replace one.
 - Code lives in marola-app (the `oods/` sbt module); this repo holds data, workflows that run the
   pinned app image (`marola-image`), and docs. This repo never builds Scala.
 - No repo reads another's tree. A contract crosses repos as an image, a release asset, a branch
-  or a database, never as a path into a sibling checkout.
+  or a bucket, never as a path into a sibling checkout.
 
 ## III. Scala discipline (marola-app `.claude/rules/scala.md`)
 

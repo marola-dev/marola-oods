@@ -1,31 +1,39 @@
-# Implementation plan: Beach persistence in Supabase
+# Implementation plan: the store on Backblaze B2, beaches first
 
-**Branch**: `001-beach-persistence` | **Date**: 2026-10-02 | **Spec**: [spec.md](spec.md)
-**MIP**: [MIP-0075](https://github.com/marola-dev/marola/blob/claude/zen-brown-d4e27k/docs/MIPs/MIP-0075-water-quality-store-supabase.md) | **Input**: the spec, marola-dev/marola-oods#1, MIP-0056 §5.2–§5.6, marola-app at `06280ba`.
+**Branch**: `001-beach-persistence` | **Date**: 2026-10-05 | **Spec**: [spec.md](spec.md)
+**MIP**: [MIP-0075](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md) | **Input**: the spec, marola-dev/marola-oods#1, MIP-0056 §5.2–§5.6, marola-app `main` on 2026-10-05.
 
 ## Summary
 
-A Postgres schema (`oods`) in Supabase holds sources, monitoring points, their samples and every
-fetch run, in English, indexed by state, with a flat Praia Limpa-shaped view (`beach_point`) and
-marola's own in-water coordinates the ETL cannot overwrite. An ETL in marola-app's `oods` module
-(Scala 3, Kyo) reuses today's agency parsers, loads one state per GitHub Actions job from
-marola-oods, upserts idempotently, throttles and resumes a backfill, and records each run.
-Tested on a real Postgres in a container; never on SQLite (research R1).
+The private Backblaze B2 bucket `br-open-ocean-data-storage` holds marola's open ocean data as
+Parquet and JSON. Two ETLs in marola-app's `oods` module (Scala 3, Kyo, DuckDB over the S3 API)
+write it, each run from this repo's workflows on the pinned image:
+
+1. **The beach ETL** (first): per map area, the OSM beaches, facilities and trails the app already
+   fetches, plus a `BeachSnapshot` JSON the site build can read in place of Overpass.
+2. **The water-quality ETL** (second): per state, the agencies' points and samples by year,
+   idempotent, throttled and resumable, plus a `latest/<source>.json` the build reads in place of
+   the agencies.
+
+Both share the store trait, the write order, the manifest and the run records. The read side is
+DuckDB SQL ([contracts/views.sql](contracts/views.sql)), checked by
+[contracts/checks.sql](contracts/checks.sql).
 
 ## Technical context
 
 | | |
 |---|---|
 | **Language** | Scala 3.9.0 on JDK 25 (marola-app's `build.sbt`) |
-| **Effects** | Kyo 1.0.0-RC7 (bumped from RC5 for `kyo-sql`, R2) |
-| **Primary dependencies** | `kyo-sql` + `kyo-sql-postgres` 1.0.0-RC7 (R2); PDFBox (exists); marola-app `local`'s parsers and `Http` |
-| **Storage** | Supabase Postgres 15+/17, schema `oods`, via Supavisor session mode (5432) |
-| **Testing** | munit; hand-written doubles; Testcontainers (`testcontainers-scala-munit`, `-postgresql`) with `supabase/postgres:<tag>`; [contracts/schema-check.sql](contracts/schema-check.sql) |
+| **Effects** | Kyo 1.0.0-RC7 (marola-app `main`) |
+| **Primary dependencies** | `org.duckdb:duckdb_jdbc` 1.5.6.0 with `httpfs` baked into the image (R2, R3); PDFBox (exists); marola-app's `BeachFinder`, `OverpassAccessibilityClient`, `TrailFinder`, agency parsers and `Http` |
+| **Storage** | Backblaze B2, bucket `br-open-ocean-data-storage`, endpoint `s3.us-east-005.backblazeb2.com`, region `us-east-005`; Parquet (zstd) and JSON |
+| **Credentials** | marola-oods: secret `BACKBLAZE_ETL_APP_KEY`, variables `BACKBLAZE_ETL_KEY_ID`, `BACKBLAZE_ETL_KEY_NAME` (set 2026-10-05); the app reads provider-neutral `OODS_S3_*` (FR-002) |
+| **Testing** | munit; hand-written doubles; a local-directory store; MinIO in Testcontainers; `checks.sql` |
 | **Target** | `ubuntu-latest` GitHub runner, the pinned JVM image (`marola-image`) |
-| **Project type** | an sbt module (marola-app `oods/`) + a workflow (marola-oods) |
-| **Performance goals** | SC incremental < 5 min; SC backfill ≈ 1 h, resumable (SC-001, SC-002) |
-| **Constraints** | ≥ 250 ms between requests per host, concurrency ≤ 4, stop on 429/403; job ≤ 330 min; store < 150 MB (free plan 500 MB) |
-| **Scale** | 3 sources now, ~685 points; 14 states eventually, ~1,500 points |
+| **Project type** | an sbt module (marola-app `oods/`) + workflows (marola-oods) |
+| **Performance goals** | beaches < 5 min for all areas; SC incremental < 5 min; SC backfill ≈ 1 h, resumable |
+| **Constraints** | ≥ 250 ms between requests per agency host, concurrency ≤ 4, stop on 429/403; job ≤ 330 min; bucket < 100 MB of the free 10 GB |
+| **Scale** | 3 areas, ~200 beaches; 3 sources now, ~685 points; 14 states eventually, ~1,500 points |
 
 ## Constitution check
 
@@ -34,16 +42,14 @@ proceed; **implementation may not** until every ✗ is cleared by a person.
 
 | Gate | Status | What clears it |
 |---|---|---|
-| I.1 Cost | ✗ | A person creates the Supabase project, states free or Pro, confirms the monthly cost |
-| I.2 No secrets in code | ✓ | `OODS_DATABASE_URL`, `MAROLA_BR_PROXY` are Actions secrets; the role password is set in the dashboard; the URL type redacts `toString` |
+| I.1 Cost | ✓ for the beach ETL; ✗ for RJ/BA | B2 needs no card and refuses usage above the free tier; the bucket and ETL key exist (2026-10-05). The Brazil proxy VM for RJ/BA is still a person's act and cost |
+| I.2 No secrets in code | ✓ | the key is the Actions secret `BACKBLAZE_ETL_APP_KEY`; its id and name are variables; the app redacts them and never makes a `PERSISTENT` DuckDB secret |
 | I.3 agent-ready | ✗ | #1 carries no `agent-ready`; per #1 its deliverable is a MIP, then task issues |
 | I.4 Trailers | ✓ | every commit |
-| I.5 Phase | ✗ | Phase 2 (cloud backend). The MIP must scope it as an explicit exception (as MIP-0057 is the GCP opt-in) or wait for Phase 1 |
-| II Repo boundaries | ✓ | code in marola-app; workflow here runs the pinned image; migrations ship in the image (R10); this repo's `etl/sources.json` is a workflow input, not read by the app's tree |
-| III Scala discipline | ✓ | `BeachStore` trait + impl + recording double; injected clock/transport/connection; failure enum (cli.md); labelled enums (data-model.md); opaque `Uf`, `IbgeCode`, `LatLon` |
-| IV Data honesty | ✓ | agency verdict kept; ratio labelled as marola's; censored counts kept; unknown ≠ proper (asserted) |
-
-Re-checked after Phase 1 design: no new violations.
+| I.5 Phase | ✗ | Phase 2 (a cloud store). MIP-0075 §11 asks for the scoped exception |
+| II Repo boundaries | ✓ | code in marola-app; workflows here run the pinned image; `etl/areas.json`, `etl/sources.json` and `etl/water-positions.csv` are this repo's inputs, passed into the container, never read from another repo |
+| III Scala discipline | ✓ | `OodsStore` trait + DuckDB impl + local-directory impl; injected clock, transport, store; failure enum (cli.md); labelled enums (data-model.md); opaque `Uf`, `IbgeCode`, `AreaId`, `LatLon` |
+| IV Data honesty | ✓ | agency verdict kept; ratio labelled as marola's; censored counts kept; unknown ≠ proper (asserted); a shrunken Overpass answer is refused |
 
 ## Project structure
 
@@ -53,15 +59,15 @@ Re-checked after Phase 1 design: no new violations.
 specs/001-beach-persistence/
 ├── spec.md            what and why
 ├── plan.md            this file
-├── research.md        decisions R1–R12
-├── data-model.md      tables, views, enums, lifecycles
-├── quickstart.md      local Supabase/Postgres, run the checks, run a load
+├── research.md        decisions R1–R14
+├── data-model.md      the bucket's tree, files, views, enums, lifecycles
+├── quickstart.md      the checks, a local store, the bucket smoke test
 ├── contracts/
-│   ├── schema.sql        the DDL (→ marola-app V001 migration)
-│   ├── schema-check.sql  executable acceptance checks for the DDL
-│   ├── cli.md            `oods migrate | load | status`
-│   └── workflow.md       beach-etl.yml
-└── tasks.md           ordered tasks, `001-T0NN`
+│   ├── views.sql         the read side, DuckDB SQL (ships in marola-app as oods/…/sql/views.sql)
+│   ├── checks.sql        executable acceptance checks for views.sql and oods check
+│   ├── cli.md            `oods beaches | load | check | status`
+│   └── workflow.md       beach-etl.yml, water-quality-etl.yml
+└── tasks.md           ordered tasks, `001-T0NN`, beaches first
 ```
 
 ### Source code
@@ -70,53 +76,64 @@ specs/001-beach-persistence/
 marola-app/
 ├── build.sbt                         oods module: dependsOn(local); cli dependsOn(oods) so
 │                                     marola.oods.Main ships in the same jar (MCP server precedent)
+├── Dockerfile                        bakes the httpfs extension for the pinned DuckDB
 └── oods/src/
-    ├── main/resources/db/migration/V001__beach_store.sql
+    ├── main/resources/sql/views.sql   = contracts/views.sql
+    ├── main/resources/sql/checks/     oods check's queries
     ├── main/scala/marola/oods/
-    │   ├── Main.scala                 migrate | load | status; exit codes
-    │   ├── model/                     PointRow, SampleRow, enums with label/fromLabel, Uf, IbgeCode, LatLon
+    │   ├── Main.scala                 beaches | load | check | status; exit codes
+    │   ├── model/                     BeachRow, FacilityRow, TrailRow, PointRow, SampleRow, enums, Uf, IbgeCode, AreaId, LatLon
+    │   ├── store/OodsStore.scala      trait: manifest, writeObject, writeLatest, recordRun
+    │   ├── store/DuckDbStore.scala    duckdb_jdbc + httpfs, TYPE s3 secret from OodsS3Config
+    │   ├── store/OodsS3Config.scala   OODS_S3_* from the environment, redacted toString
+    │   ├── beaches/BeachLoad.scala    areas → BeachFinder, OverpassAccessibilityClient, TrailFinder → rows → store
     │   ├── plan/Planner.scala         pure: partitions, mutability, filters (MIP-0056 §5.2)
     │   ├── fetch/Throttle.scala       per-host spacing, retries, 429/403 stop
     │   ├── adapter/SourceAdapter.scala
     │   ├── adapter/ImaScAdapter.scala     JSON mapa (incremental) + CSV beach-year (backfill)
     │   ├── adapter/IneaRjAdapter.scala    IneaPdfParser + curated coords
     │   ├── adapter/InemaBaAdapter.scala   InemaPdfParser + curated coords
-    │   ├── store/BeachStore.scala         trait: upsertPoints, upsertSamples, partitions, runs, retain
-    │   ├── store/PostgresBeachStore.scala  kyo-sql-postgres
-    │   ├── store/Migrations.scala
-    │   └── Load.scala                     wires plan → fetch → parse → store → fetch_run
+    │   └── Load.scala                     plan → fetch → parse → check → store → latest → run
     └── test/scala/marola/oods/
-        ├── adapter/*Spec.scala            captured bulletin → exact rows
+        ├── beaches/BeachLoadSpec.scala     captured Overpass answers → exact rows + snapshot
+        ├── adapter/*Spec.scala             captured bulletin → exact rows
         ├── plan/PlannerSpec.scala
-        ├── fetch/ThrottleSpec.scala       fake clock + recording transport
-        ├── LoadSpec.scala                 RecordingBeachStore: idempotency, failure paths
-        └── store/PostgresBeachStoreIT.scala   Testcontainers, tagged Integration
+        ├── fetch/ThrottleSpec.scala        fake clock + recording transport
+        ├── LoadSpec.scala                  local-directory store: idempotency, failure paths, write order
+        └── store/DuckDbStoreIT.scala       MinIO in Testcontainers, tagged Integration
 
 marola-oods/
 ├── .github/workflows/beach-etl.yml
+├── .github/workflows/water-quality-etl.yml
+├── etl/areas.json
 ├── etl/sources.json
+├── etl/water-positions.csv
 └── scripts/br-proxy.sh               from marola-dev/marola-site#20
 ```
 
-**Structure decision**: the store's schema ships with the code that writes it (marola-app), so
-the integration tests run the real migrations; this repo holds only the workflow and its input.
+**Structure decision**: the SQL ships with the code that runs it (marola-app), so the tests run
+the same views and checks the bucket gets; this repo holds the workflows and their inputs.
 
 ## Phases
 
-0. **Gates** (people): cost, phase exception, `agent-ready`, MIP-0075 accepted.
-1. **Schema + store**: migrations, `BeachStore`, Postgres impl, integration suite.
-2. **SC end to end (MVP)**: planner, throttle, IMA/SC adapter, `oods load --state SC`, workflow
-   with SC only. Independently shippable: SC needs no proxy.
-3. **Water coordinates and the flat view** in use: a reviewed migration seeding the first
-   `water_*` values; `beach_point` read by `oods status`.
-4. **RJ and BA**, once the proxy exists.
-5. **Polish**: retention, budgeted backfill chaining, docs, AGENTS.md lines.
+0. **Gates** (people): phase exception, `agent-ready`, MIP-0075's B2 revision accepted, the bucket
+   lifecycle set (R9).
+1. **Store**: the `oods` module, `OodsStore`, DuckDB on S3, the local and MinIO suites.
+2. **Beach ETL (MVP, US1)**: `oods beaches`, `etl/areas.json`, `beach-etl.yml`, first real load.
+   Needs nothing but the bucket.
+3. **Water quality, SC (US2, US3, US6)**: planner, throttle, IMA/SC adapter, `oods load`,
+   `water-quality-etl.yml` with SC only, the backfill.
+4. **Water positions (US4)**: `etl/water-positions.csv`, its check, the join at export.
+5. **RJ and BA (US5)**, once the proxy exists.
+6. **Polish**: the read-only key for marola-site and marola-ml, facility and trail snapshots in
+   the app, docs, AGENTS.md lines.
 
 ## Complexity tracking
 
 | Choice | Why | Simpler alternative rejected because |
 |---|---|---|
-| `fetch_partition` table | resumable backfill without git | MIP-0056's manifest lived in git, which this store no longer writes |
-| Column-level grants on `point` | ETL physically cannot write `water_*` | a convention in code is one bug away from erasing curated positions |
-| Own 40-line migration runner | tests run the shipped migrations | Flyway is a dependency for one table; Supabase CLI puts SQL in another repo |
+| A manifest per area/source | idempotency and resume without a database | listing the bucket can't tell a complete partition from one a crash left behind |
+| Hash over sorted rows, not bytes | an engine upgrade doesn't rewrite the store | a byte hash changes with every Parquet writer version |
+| Water positions in git | the ETL physically cannot write them | in the bucket, the ETL's read-write key can |
+| `OODS_S3_*` in the app, `BACKBLAZE_*` in the workflow | tests and a later provider change touch the workflow only | provider names in the app tie the code to B2 |
 | Same image, second main class | one pin to bump | a second image means two digests kept in step |

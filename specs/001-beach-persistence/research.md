@@ -1,181 +1,196 @@
-# Research: Beach persistence in Supabase
+# Research: the store on Backblaze B2, beaches first
 
-The decisions here are summarised in [MIP-0075](https://github.com/marola-dev/marola/blob/claude/zen-brown-d4e27k/docs/MIPs/MIP-0075-water-quality-store-supabase.md); this page keeps the reasoning.
+Phase 0 of [plan.md](plan.md). Each entry: the decision, why, and what was rejected. The
+decisions are summarised in [MIP-0075](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md),
+which still names R2 until its B2 revision lands. Facts about marola's code were read from
+marola-app `main` on 2026-10-05; DuckDB was run locally (1.5.5 with `httpfs`, 1.5.6 for the
+checks); Backblaze's figures come from its sign-up and pricing pages, read 2026-10-05.
 
-Phase 0 of [plan.md](plan.md). Each entry: the decision, why, and what was rejected. Facts about
-marola's code were read from marola-app at `06280ba` and the umbrella's MIP-0056; facts about
-Kyo and client libraries are #1's, checked on Maven Central 2026-10-02; the schema was run on a
-real Postgres 16 ([contracts/schema-check.sql](contracts/schema-check.sql) passes, and fails when
-the unknown-handling in `point_fitness` is broken on purpose).
+## R1. Testing: a local directory, MinIO, and the DuckDB checks
 
-## R1. Testing: a real Postgres in a container, never SQLite
-
-**Question asked**: can the store be tested against a self-hosted Supabase or SQLite?
-
-**Decision**: test against real Postgres, at three levels.
+**Decision**: three levels, none of them a hosted bucket.
 
 | Level | What | Where it runs | What it proves |
 |---|---|---|---|
-| Unit | `BeachStore` replaced by a hand-written `RecordingBeachStore` (a trait instance that records rows); adapters fed captured bulletins through `Http.withTransport` | `sbt oods/test`, no Docker | parsing, planning, throttling, idempotency logic |
-| Integration | Testcontainers starting `supabase/postgres:<tag>` (the image Supabase itself runs, with its roles and extensions), the migrations applied by the app's own `oods migrate` | `sbt oods/it` (tagged `Integration`, excluded from `just test` as `E2E` is), a CI job on `ubuntu-latest` (Docker is there) | the SQL: upserts, `nulls not distinct`, grants, views, retention |
-| Manual | `supabase start` (Supabase CLI, Docker): the full local stack, Postgres on `54322`, Studio on `54323` | a laptop | looking at the data in Studio, trying PostgREST exposure |
+| Unit | the `OodsStore` trait on a local directory (`file://` paths, the same DuckDB SQL); adapters and the beach loader fed captured answers through `Http.withTransport` | `sbt oods/test`, no Docker, no network | parsing, planning, throttling, write order, idempotency |
+| Integration | the same suite with the store on MinIO in Testcontainers, `OODS_S3_ENDPOINT` pointed at it | `sbt oods/testOnly -- --include-tags=Integration`, a CI job on `ubuntu-latest` | the S3 path: the secret, `COPY … TO 's3://…'`, globbing, overwrite |
+| Contract | [contracts/checks.sql](contracts/checks.sql) over fixtures, with [views.sql](contracts/views.sql) | any DuckDB; this repo's CI | the views and what `oods check` refuses |
 
-Pin the container tag to the Postgres major the hosted project runs (Supabase Dashboard →
-Settings → Infrastructure), so a test never passes on a version the store doesn't run. A plain
-`postgres:17` image also works for everything except Supabase's own roles (`anon`,
-`authenticated`, `service_role`), which only the RLS checks need.
+`checks.sql` passes on DuckDB 1.5.6, and fails with `US3.1: expected 3/4 of 5 = 0.75, got 3/4 of
+5 = 0.6` when `point_fitness` is broken to count unknowns as classified (run 2026-10-05).
 
-**Why not SQLite**: the tests would pass against a database the store never runs.
-- `kyo-sql-postgres` (R2), like every alternative weighed (Skunk, pgjdbc), speaks the Postgres
-  wire protocol only; none of them can open SQLite, so the code under test would not be the code shipped.
-- The schema depends on Postgres-only features: `unique nulls not distinct` (the sample key with no
-  time), `distinct on` (latest per point), `count(*) filter`, `security_invoker` views, column
-  grants, RLS policies, `timestamptz`, regex checks, `on conflict … do update … where`.
-- A SQLite-flavoured copy of the schema would be a second schema to keep in step.
+## R2. DuckDB over the S3 API
 
-DuckDB, already in MIP-0056's plan for Parquet, is the same story: close dialect, different engine.
+**Decision**: DuckDB's `httpfs` with a session secret:
 
-## R2. The Scala Postgres client
+```sql
+CREATE SECRET oods (TYPE s3, KEY_ID ?, SECRET ?, ENDPOINT 's3.us-east-005.backblazeb2.com',
+                    REGION 'us-east-005', URL_STYLE 'vhost', SCOPE 's3://br-open-ocean-data-storage');
+```
 
-Supabase has no Scala SDK; the app runs Kyo without cats-effect (#1 §2 table).
+- Checked locally on 2026-10-05 with DuckDB 1.5.5: the secret is accepted, and a `COPY` to the
+  bucket became a `PUT` to `https://<bucket>.s3.us-east-005.backblazeb2.com/…`. The sandbox here
+  blocks that host, so the first real upload is the maintainer's smoke test
+  ([quickstart](quickstart.md#b-the-hosted-bucket-smoke-test)).
+- Values come from the environment through the app (FR-002), not from DuckDB's `getenv()`, which
+  the Python build does not have and the CLI only allows when unsandboxed. Never `PERSISTENT`: a
+  persistent secret is written in plain text under `~/.duckdb/stored_secrets`.
+- The extension must match the engine exactly. The image bakes `httpfs` for the pinned engine and
+  loads it from a file with `autoinstall_known_extensions` off, so a job never downloads code at
+  run time.
+- DuckDB's own `http_proxy` setting stays empty: B2 is reached directly (FR-016).
 
-**Decision** (maintainer, 2026-10-02): `kyo-sql` + `kyo-sql-postgres` 1.0.0-RC7, behind a
-`BeachStore` trait. The Kyo RC5 → RC7 bump that it needs is done on its own, first: marola-app
-branch `claude/zen-brown-d4e27k` (`build: bump Kyo 1.0.0-RC5 → 1.0.0-RC7`). It needed no code
-change, and all 281 tests, scalafmt and scalafix pass. The GraalVM native-image build is left to
-marola-app's CI.
+## R3. The Scala client for DuckDB
 
-What the RC7 jars hold (read from Maven Central, 2026-10-02):
-- `kyo-sql` depends on `kyo-core`, `kyo-schema-json` and `kyo-net` only, built for Scala 3.9.0, the
-  app's version. No JDBC, no Netty, no cats-effect.
-- `kyo-sql-postgres` is a native wire-protocol client (`PostgresClient`, `PostgresConfig`) with
-  TLS (`SslRequest`, via `kyo-net`'s `NetTlsConfig`), SCRAM authentication (Supabase's default),
-  prepared statements, `COPY` and a connection pool. Clear-text passwords without TLS are refused
-  (`SqlConnectionClearPasswordRequiresTlsException`).
-- It is pre-1.0 and new (first published in RC6). Per `.claude/rules/scala.md`, the API is checked
-  against the jar (`javap`, the jar-verifier agent), not against getkyo.io's latest docs.
+**Decision**: `org.duckdb:duckdb_jdbc` 1.5.6.0 called directly, behind an `OodsStore` trait,
+wrapped in Kyo at the boundary (`Sync.defer` for each call, `Scope` for the connection; both
+exist in Kyo 1.0.0-RC7, marola-app's pin). The jar bundles the native libraries (~85 MB) and has
+`DuckDBAppender` for row writes. Rows go in through the appender into a temporary table, then one
+`COPY (select … order by key) TO 's3://…' (FORMAT parquet)` per object.
 
-Alternatives, rejected:
-- Plain Postgres JDBC (`org.postgresql:postgresql`) in `Sync.defer`. It needs no bump and has
-  GraalVM metadata, but means hand-written row mapping. It stays the fallback if `kyo-sql` blocks
-  on something the store needs. Callers depend on the trait (`.claude/rules/scala.md`), so a swap
-  touches one class.
-- Skunk, #1's suggested fallback. It reaches Kyo only through `kyo-cats`, pinned at RC5, so it
-  needs a separate cats-effect entrypoint: two effect systems in one module. doobie has the same
-  caveat, plus Hikari.
-- PostgREST over HTTP, for writes. It needs the schema exposed to the API and a `service_role` key
-  in CI, and the batch upserts and transactions here are SQL's job.
+| Library | DuckDB | Verdict |
+|---|---|---|
+| `duckdb_jdbc` 1.5.6.0 | the engine itself | **taken** |
+| duck4s 0.1.4 | pins `duckdb_jdbc` 1.4.4.0 | rejected: an engine behind the one tested here |
+| Magnum 2.0.0-M3, Anorm 3.1.0 | JDBC, so it works | optional later for typed reads; not needed to write |
+| ScalaSql 0.3.2, kyo-sql RC7, doobie RC12, Quill 4.8.6 | no DuckDB dialect or driver | rejected |
 
-It connects through **Supavisor session mode, port 5432**, because it prepares statements, which
-transaction mode (6543) does not support (#1, Supavisor FAQ).
+Callers depend on the trait (`.claude/rules/scala.md`), so a swap touches one class. The trait's
+real effect rows are checked against the pinned Kyo jar when written.
 
-## R3. Column names: MIP-0056's, with the Praia Limpa field mapped
+## R4. Write order is the transaction
 
-**Decision**: keep MIP-0056 §5.3's English names so a row moves between Supabase and Parquet
-unchanged (#1 §1), and document the Praia Limpa dictionary field each one carries.
+Object storage has no transactions. **Decision**: per area or source, write data objects, then
+`points.parquet`, then the manifest, then `latest/`, then the run record (FR-015).
+
+- An S3 `PUT` replaces an object atomically: a reader sees the old or the new object, never half.
+- A run killed after a partition but before the manifest leaves an object the manifest does not
+  list; the next run's hash matches the new rows and rewrites the same content, so nothing is lost
+  or duplicated.
+- `latest/` moves only after everything it summarises is written, so the build never reads a
+  `latest/` ahead of its data.
+- Only one job writes a prefix at a time: `concurrency` per state or per area in the workflow.
+- The content hash is over the rows sorted by key (`checks.sql` FR-009 case), not the Parquet
+  bytes, so an engine upgrade that changes encoding does not rewrite the store.
+
+## R5. Column names: MIP-0056's, with the Praia Limpa field mapped
+
+**Decision**: keep MIP-0056 §5.3's English names, and document the Praia Limpa field each carries.
 
 | Praia Limpa (MMA) | Column | Type | Note |
 |---|---|---|---|
-| ESTADO | `point.state` | `char(2)` | UF, including `DF`; checked `^[A-Z]{2}$`; indexed with `municipality` |
-| CODMUN | `point.ibge_code` | `char(7)` | IBGE municipality code, checked `^[0-9]{7}$`; indexed |
-| MUNICIPIO | `point.municipality` | `text` | the agency's spelling; join on `ibge_code`, not on this |
-| NOME_PONTO | `point.point_name` | `text` | `Ponto 35`, `Lago Paranoá 001` |
-| NOME_BALNEARIO | `point.beach_name` | `text` | `Praia de Copacabana` |
-| REFERENCIA_LOCALIZACAO | `point.location_desc` | `text` | MIP-0056's name; "próximo à Ponte JK" |
-| BALNEABILIDADE | `sample.condition` (+ `agency_label`), and `point_fitness` | see R4 | |
-| LATITUDE, LONGITUDE | `point.lat`, `point.lon` | `double precision` | the agency's position, decimal degrees |
-| — (marola) | `point.water_lat`, `point.water_lon`, `point.water_geo_source` | | R5 |
-| CREATED_AT, UPDATED_AT | `created_at`, `updated_at` | `timestamptz` | on `source`, `point`, `sample`; `updated_at` by trigger |
+| ESTADO | `point.state` | text, `[A-Z]{2}` | UF, including `DF` |
+| CODMUN | `point.ibge_code` | text, `[0-9]{7}` | IBGE municipality code; the join key |
+| MUNICIPIO | `point.municipality` | text | the agency's spelling |
+| NOME_PONTO | `point.point_name` | text | `Ponto 35`, `Lago Paranoá 001` |
+| NOME_BALNEARIO | `point.beach_name` | text | `Praia de Copacabana` |
+| REFERENCIA_LOCALIZACAO | `point.location_desc` | text | "próximo à Ponte JK" |
+| BALNEABILIDADE | `sample.condition` (+ `agency_label`), and `point_fitness` | | R11 |
+| LATITUDE, LONGITUDE | `point.lat`, `point.lon` | double | the agency's position |
+| — (marola) | `water_position.*` | | R12 |
+| CREATED_AT, UPDATED_AT | `point.first_seen`, `last_seen` | date | files have no row timestamps; the manifest has write times |
 
-Rejected: renaming to `location_reference` (the user's literal translation). It is the better
-English, but it breaks the "same columns as the Parquet" rule for no reader's gain.
+## R6. Where the beach ETL gets its areas
 
-## R4. BALNEABILIDADE: the agency's verdict, and marola's share beside it
+The areas are marola-site's `site/areas.json`, and no repo reads another's tree (MIP-0070 §5.4).
+**Decision**: this repo keeps `etl/areas.json` with only the fields the ETL needs (`id`, `lat`,
+`lon`, `radius_km`, `beach_limit`), copied from marola-site's by a PR when an area changes; its CI
+checks the shape. The snapshot key is computed from those values, so a
+mismatch with the site's file shows as a missing snapshot (the build falls back to Overpass), not
+a wrong one. Rejected: fetching marola-site's file over HTTP (a tree read with extra steps), and
+a workflow input listing the areas (nobody types three bounding boxes into a dispatch form).
+[NEEDS CLARIFICATION: whether marola-site should instead publish `areas.json` as a release asset
+or into the bucket, making this copy unnecessary.]
+
+## R7. The beach registry's shape
+
+**Decision**: three Parquet files per area for readers that want rows (DuckDB, ML), and one
+`BeachSnapshot` v1 JSON per area for the build, because `BeachFinder` already reads that format
+from `MAROLA_BEACHES_DIR` before calling Overpass: the build gains a download step and no code.
+Facilities and trails have no snapshot reader in the app today; adding one each, in the same
+directory, is a marola-app task (tasks.md), after which a build makes no Overpass call at all.
+
+The ETL calls `BeachFinder.nearby(…, snapshots = None)`, so it always asks Overpass and never
+reads a stale snapshot back. A shrink to under half the stored beach count is refused (US1.5): an
+Overpass answer cut by a timeout would otherwise empty an area.
+
+## R8. Size and throttling
+
+| Job | Run | Requests | Rows (est.) | Host |
+|---|---|---|---|---|
+| beaches, per area | weekly | 3 (beaches, facilities, trails), plus mirror retries | ~70 + ~130 + ~30 | Overpass, direct |
+| IMA/SC | weekly; backfill once | 1 `POST /relatorio/mapa`; backfill ~143 beaches × 24 years ≈ 3,400 CSV | ~190k samples | direct |
+| INEA/RJ | weekly | 2 city pages + ~10 zone PDFs | 291 points/week | Brazil-only |
+| INEMA/BA | weekly | 1 PDF | 134 points/week | Brazil-only |
+
+Parquet with zstd puts SC's full history in a few MB; the beach files are tens of KB. With kept
+versions (R9), the bucket stays far under 100 MB (SC-005), 1% of the free 10 GB, and downloads
+(8 builds a day × a few hundred KB of `latest/`) stay under the free 3× stored data a month.
+
+**Decision**: one job per area (beaches) and per state (water quality). Incremental runs go in one
+go. A backfill is throttled (250 ms between requests to a host, ≤ 4 concurrent, 3 attempts on
+5xx/timeouts, stop on 429/403) and budgeted: `--max-minutes` (default 300, under GitHub's
+360-minute job limit) stops cleanly between partitions as `partial`, and the next dispatch resumes
+from the manifest.
+
+## R9. Object versions and the lifecycle rule
+
+B2 keeps every version of an object by default, and the bucket was created with "Keep all
+versions". Each weekly overwrite then adds a version that counts toward the 10 GB forever.
+**Decision**: change the bucket's lifecycle to keep prior versions for 30 days (B2's "Keep prior
+versions for this number of days"), which is the store's rollback: a bad load is undone by
+restoring the previous version of the affected objects. "Keep only the last version" is the
+alternative if rollback is not wanted. At R8's sizes either is free; the rule matters only so the
+store never grows without bound. A person changes it in the B2 web UI (Buckets → Lifecycle
+Settings).
+
+## R10. Where the ETL code runs from
+
+marola-oods never builds Scala and pulls the pinned `marola-image` (AGENTS.md). **Decision**
+(MIP-0075 §5.1): the `oods` module ships in the same JVM image as a second main class
+(`marola.oods.Main`), run with `--entrypoint java`; one pin, one digest. The native-image binary
+the site uses never loads it. Rejected: a second image (two pins to bump together).
+
+## R11. BALNEABILIDADE: the agency's verdict, and marola's share beside it
 
 **Decision**: two things, never one.
 - `sample.condition` (`propria | impropria | unknown`) and `sample.agency_label` (as printed) are
   the agency's verdict. Nothing recomputes them (constitution IV, #1 §1).
 - `point_fitness` is marola's summary over the last 5 deduplicated samples: `proper_count`,
-  `classified_count` (proper + improper), `sample_window` (≤ 5), `proper_ratio =
-  proper_count / classified_count`, rounded to 2. Read as `4/5 (0.80)`.
+  `classified_count` (proper + improper), `sample_window` (≤ 5), `proper_ratio`, rounded to 2.
+  Read as `4/5 (0.80)`.
 - `unknown` counts in the window but not in the ratio, and an all-unknown point has a NULL ratio,
-  not 1.0: marola-app#15 fixed exactly that bug in `Swimability` ("unknown water points no longer
-  read as PRÓPRIA (n/n)"); the view must not reintroduce it. `schema-check.sql` asserts it.
-- A view, not a stored column: it can never be stale, and at ~1,500 points it is cheap.
+  not 1.0: marola-app#15 fixed exactly that bug in `Swimability`; `checks.sql` asserts it.
+- A view, not a stored column: it can never be stale.
 
 Window = 5 because CONAMA 274/2000 classifies on the last five weeks.
 
-## R5. `water_lat` / `water_lon`
+## R12. marola's water positions live in git
 
-**Decision**: three nullable columns on `point` (`water_lat`, `water_lon`, `water_geo_source`),
-written only by a person (a SQL migration or Studio, reviewed in a PR), never by the ETL.
-- Enforced by the database, not by discipline: the ETL role gets column-level `insert`/`update`
-  grants that leave them out. A column-level `revoke` would not undo a table-level `grant`, which
-  is why the grants are listed column by column. `schema-check.sql` proves the ETL role is refused.
-- All three set or none (`point_water_triple`); both coordinates inside Brazil's bounding box,
-  which also rejects a swapped lat/lon (`Coordinates(lat, lon)` takes any two Doubles today).
-- Rejected: a separate `point_water_position` table. Cleaner provenance, but every reader joins
-  one more table for two numbers; the column grants already give the ETL-can't-touch guarantee.
+**Decision**: `etl/water-positions.csv` in this repo (`source_id, point_key, water_lat,
+water_lon, water_geo_source`), changed by one reviewed PR each, checked by this repo's CI (all
+three set or none, inside Brazil's box), and joined into `beach_point` and `latest/` at export.
+The ETL has no code path that writes it, which is a stronger guarantee than the column grants the
+Postgres draft used. Rejected: storing them in the bucket (the ETL's key can write anything there).
 
-## R6. Sample key with no time
+## R13. Rejected stores
 
-MIP-0056's key is `(source_id, point_key, sampled_on, sampled_at, channel)` with `sampled_at`
-nullable. A Postgres primary key forces every column `not null`, and most PDFs print no time.
-**Decision**: a surrogate `sample_id` primary key plus `unique nulls not distinct` on the natural
-key (Postgres 15+), which `on conflict` targets. Tested: re-inserting a NULL-time sample conflicts.
+| Store | Why not, as of 2026-10-05 |
+|---|---|
+| Supabase Postgres (this spec's first draft) | a server to keep awake (the free project pauses after a week idle), a role and grants to maintain, for data that is read in batches |
+| Cloudflare R2 (MIP-0075 as merged) | asked the maintainer for a credit card |
+| Cloudflare D1 (marola#667) | only an HTTP query API, rows-read billing, 100 parameters per statement; a fit for per-request reads later, not for batch history |
+| Filebase, Supabase Storage, a Hugging Face dataset | 5 GB and one bucket; 1 GB and pausing; no S3 writes |
 
-## R7. Idempotency without touching `updated_at`
-
-`on conflict do update` fires the `updated_at` trigger even when nothing changed. **Decision**:
-every upsert carries `where (old cols) is distinct from (excluded cols)`, so an unchanged row is
-not updated at all. Samples use `on conflict … do nothing` unless the adapter has a reason to
-revise them (IMA revises current-year rows: then the same `is distinct from` guard).
-
-## R8. Size and throttling, per state
-
-| Source | Incremental run | Backfill | Rows (est.) | Host |
-|---|---|---|---|---|
-| IMA/SC | 1 `POST /relatorio/mapa` (~207 KB, 260 points × last 5), or ~143–286 CSV beach-years | ~143 beaches × 24 years ≈ 3,400 CSV requests | ~260 × ~32/yr × 23 yr ≈ 190k samples | direct |
-| INEA/RJ | 2 city pages + ~10 zone PDFs | Wayback/listing archive, unverified | 291 points/week | Brazil-only |
-| INEMA/BA | 1 PDF | campaign ids walked downward, unverified | 134 points/week | Brazil-only |
-
-At ~250 bytes a row plus two indexes, SC's full history is ~60–80 MB; with RJ and BA weekly
-rows, well under the free plan's 500 MB (SC-005).
-
-**Decision**: one job per state; inside it, the MIP-0056 §5.2 planner. Incremental runs go "in
-one go". Backfill is throttled (250 ms between requests to a host, ≤ 4 concurrent, 3 attempts on
-5xx/timeouts, stop on 429/403) and **budgeted**: `--max-minutes` (default 300, under GitHub's
-360-minute job limit) stops cleanly between partitions with `fetch_run.outcome = 'partial'`, and
-the next dispatch resumes from `fetch_partition`. At ~1 request/s, SC's backfill is about an hour.
-
-## R9. Where the ETL code runs from
-
-marola-oods never builds Scala and pulls the pinned `marola-image` (AGENTS.md). MIP-0056 kept
-`oods` out of the runtime image and ran it with `sbt oods/run` in marola's own workflow; after the
-polyrepo split that workflow lives here (#1 §2), so the code has to arrive as an image.
-**Decision** (MIP-0075 §5.1): the `oods` module's assembly ships in the same JVM image as a second
-main class (`marola.oods.Main`), run with `--entrypoint`; one pin, one digest. The native-image
-binary the site uses never loads it. Rejected: a second image (two pins to bump together).
-
-## R10. Migrations
-
-**Decision**: numbered SQL files in marola-app `oods/src/main/resources/db/migration/`
-(`V001__beach_store.sql` = [contracts/schema.sql](contracts/schema.sql)), applied in order by
-`oods migrate`, recorded in `oods.schema_version (version, applied_at, checksum)`; a changed
-applied file is an error. The same runner sets up the Testcontainers database, so tests exercise
-the shipped migrations. Rejected: Flyway (a new dependency for ~40 lines of code); Supabase CLI
-`db push` from marola-oods (the SQL would live in a different repo from the tests that check it).
-
-## R11. Not exposing the store to the browser
-
-Supabase serves the `public` schema to anyone with the anon key, and a view there runs with its
-owner's rights, past RLS. **Decision**: everything in an `oods` schema left out of "Exposed
-schemas"; RLS on anyway with a policy only for `marola_etl`; views `security_invoker`. The map's
-build reads with a read-only role over Postgres, never from the page (#1 "Out of scope").
-
-## R12. Seeding from Praia Limpa (not taken)
+## R14. Seeding from Praia Limpa (not taken)
 
 MMA's open Praia Limpa CSV (2021-01-04 to 2022-09-16, 13 states, no coordinates, no counts) could
-seed points for states without an adapter. Not in this spec: rows without coordinates or counts
-for agencies marola does not read yet would be points nobody refreshes. A later adapter can use it
-as its backfill.
+seed points for states without an adapter. Not in this spec: rows nobody refreshes. A later
+adapter can use it as its backfill.
+
+## Not checked
+
+- That an account with no card is refused, not billed, above the free tier. Backblaze's sign-up
+  says "No credit card required"; the caps behaviour is from its docs as summarised in the setup
+  guide, not tested.
+- A real upload to the bucket (the sandbox blocks the host): the maintainer's smoke test.

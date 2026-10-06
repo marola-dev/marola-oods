@@ -24,6 +24,22 @@ nix develop               # the lint tools and the devkit's tools; links .devkit
 just quality              # every gate CI runs, plus docs-lint
 just oods-tree-check      # the shape check alone
 just app-image            # print the pinned app image
+just lake-migrate         # build or migrate a local DuckLake under .tmp/lake/
+```
+
+The first `just quality` or `just lake-migrate` downloads DuckDB's `ducklake` extension into
+`.tmp/duckdb-ext/`, so it needs the network once.
+
+## Repo map — the lake (MIP-0075)
+
+```
+specs/001-beach-persistence/
+  spec.md                            what the beach and water-quality store must do
+  contracts/
+    migrations/0001_init.sql         the nine tables and schema_migration; sample partitioned by source_id, year
+    views.sql                        the read views, stored in the lake's catalog
+    checks.sql                       the executable acceptance checks (oods check)
+scripts/lake-migrate.sh              applies pending migrations and views.sql: a local lake, or --b2 by a person
 ```
 
 ## Repo map — planned (MIP-0056)
@@ -57,6 +73,6 @@ data/oods/
 ## Docs and AGENTS.md
 
 - [docs/3-development.md](docs/3-development.md): what `oods-check.yml` checks today versus once
-  MIP-0056 lands, and how to bump the pinned image.
+  MIP-0056 lands, how to bump the pinned image, and the lake schema's migrations.
 - [AGENTS.md](https://github.com/marola-dev/marola-oods/blob/main/AGENTS.md): what this repo is
   and where it differs from the umbrella's rules.

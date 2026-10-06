@@ -34,6 +34,10 @@ commits to it.
   formats MIP-0056 specifies (`.md`, `.json`, `.jsonl`, `.csv`, `.parquet`).
 - `scripts/app-image.sh`: the pinned app image in `marola-image`, the same pin shape marola-site
   and marola-ml use.
+- `specs/001-beach-persistence/contracts/migrations/` and `scripts/lake-migrate.sh`: MIP-0075's
+  DuckLake schema as numbered migrations, applied to a local lake by `just lake-migrate` (and its
+  self-test by `just quality`). Its `--b2` mode writes the bucket's catalog: a person runs it,
+  never an agent and never CI.
 
 ## What it consumes and produces (MIP-0070 §5.4)
 
@@ -54,6 +58,7 @@ nix develop               # the lint tools and the devkit's tools; links .devkit
 just quality              # every gate CI runs
 just oods-tree-check      # the shape check alone
 just app-image            # print the pinned app image
+just lake-migrate         # migrate a local DuckLake under .tmp/lake/
 ```
 
 The devkit's git hooks (`core.hooksPath .devkit/.githooks`, set by the dev shell) run
@@ -63,7 +68,8 @@ The devkit's git hooks (`core.hooksPath .devkit/.githooks`, set by the dev shell
 
 `README.md` is the landing: what this repo is, its status, how to try it, the repo map and its
 contracts. There is no `docs/index.md`. `docs/` holds numbered pages (MIP-0074 §5.2); today just
-`docs/3-development.md` (what `oods-check.yml` checks and how to bump the pinned image) — a repo
+`docs/3-development.md` (what `oods-check.yml` checks, how to bump the pinned image, the lake
+schema's migrations) — a repo
 this small adds `1-design`/`2-libraries`/`4-reference` only if it grows into them.
 
 - **Links**: relative within `docs/` and from the README into `docs/`, written to work on GitHub.

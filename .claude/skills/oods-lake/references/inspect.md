@@ -54,7 +54,7 @@ SELECT name, persistent, scope FROM duckdb_secrets();
 
 ```sql
 -- needs: b2
-ATTACH 'ducklake:WORK/oods.ducklake' AS lake (READ_ONLY);  -- WORK: the download directory above
+ATTACH 'ducklake:<work_dir>/oods.ducklake' AS lake (READ_ONLY);  -- <work_dir>: the download directory above
 SELECT count(*) FROM lake.snapshots();
 ```
 

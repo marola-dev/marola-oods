@@ -1,0 +1,23 @@
+sets:
+  # Baseline: no skill, the same tools
+  - name: no-skills
+    model: sonnet
+    skills: []
+    allowed_tools:
+      - Read
+      - Glob
+      - Grep
+      - Bash(duckdb:*)
+      - Bash(just lake-migrate:*)
+
+  - name: with-skill
+    model: sonnet
+    skills:
+      - .claude/skills/oods-lake
+    allowed_tools:
+      - Read
+      - Glob
+      - Grep
+      - Bash(duckdb:*)
+      - Bash(just lake-migrate:*)
+      - Skill

@@ -24,6 +24,11 @@ jobs:
         scripts/oods-tree-check.sh
         scripts/oods-tree-check.sh --self-test
         scripts/app-image.sh --self-test
+        curl -fsSL -o /tmp/duckdb.gz https://github.com/duckdb/duckdb/releases/download/v1.5.5/duckdb_cli-linux-amd64.gz && echo "c61f21485e6e41d3a0c28ce9904ea18346309cf427b4cf9479bc3564348dc885  /tmp/duckdb.gz" | sha256sum -c - && mkdir -p /tmp/duckdb-bin && gunzip -c /tmp/duckdb.gz >/tmp/duckdb-bin/duckdb && chmod +x /tmp/duckdb-bin/duckdb
+        PATH="/tmp/duckdb-bin:$PATH" scripts/lake-migrate.sh --self-test
+        scripts/lake-contract.sh --self-test
+        PATH="/tmp/duckdb-bin:$PATH" scripts/skill-check.sh
+        PATH="/tmp/duckdb-bin:$PATH" scripts/skill-check.sh --self-test
         git -c advice.detachedHead=false clone -q --depth 1 -b v0.3.0 https://github.com/marola-dev/marola-devkit /tmp/devkit && python3 /tmp/devkit/scripts/docs_lint.py .
 
   agents:

@@ -1,0 +1,36 @@
+name: release
+
+# A v* tag publishes lake/ as marola-oods-lake-<tag>.tar.gz on that tag's GitHub release: the lake
+# contract marola-app pins in lake-contract.version (MIP-0070 §5.4). A tag's asset is immutable: a
+# re-run that finds it already attached fails rather than replace what consumers have fetched.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+jobs:
+  tarball:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: build marola-oods-lake-${{ github.ref_name }}.tar.gz
+        env:
+          TAG: ${{ github.ref_name }}
+        run: scripts/lake-contract.sh "$TAG" .tmp
+      - name: attach it to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          file=".tmp/marola-oods-lake-$TAG.tar.gz"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$file"
+          else
+            gh release create "$TAG" "$file" --verify-tag --title "marola-oods lake $TAG" \
+              --notes "lake/ (migrations, views.sql, checks.sql) at $TAG. marola-app pins it in lake-contract.version."
+          fi

@@ -2,7 +2,8 @@
 
 The Open Ocean Data Store ([MIP-0056](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0056-oods-open-ocean-data-store.md)):
 a git-versioned, everyone-can-read store of Brazilian bathing-water samples, one institute per
-adapter, under `data/oods/`. It is one of the marola repos under the
+adapter, under `data/oods/`. Beside it, `etl/` holds the small hand-kept inputs the ETL
+workflows read (MIP-0075). It is one of the marola repos under the
 [umbrella](https://github.com/marola-dev/marola) (MIP-0070).
 
 **Status:** empty. `data/oods/` holds only a `.gitkeep`; MIP-0056's ingest stack — the fetchers,
@@ -15,7 +16,8 @@ The fetchers, the DuckDB SQL transform, the planner and the workflow that commit
 live in [marola-app](https://github.com/marola-dev/marola-app), as its `oods/` sbt module
 (MIP-0056 §5.2), built there as a fresh MIP-0056 stack after the polyrepo split — not carried over
 from before it. The backfill recreates here, in this repo, once that ingest code lands. This repo
-holds only the data the ingest code produces: no sbt, no Python, no build.
+holds only the data the ingest code produces and the ETL inputs under `etl/`: no sbt, no Python,
+no build.
 
 ## Try it
 
@@ -23,12 +25,16 @@ holds only the data the ingest code produces: no sbt, no Python, no build.
 nix develop               # the lint tools and the devkit's tools; links .devkit
 just quality              # every gate CI runs, plus docs-lint
 just oods-tree-check      # the shape check alone
+just etl-inputs-check     # etl/'s shape check alone
 just app-image            # print the pinned app image
 ```
 
-## Repo map — planned (MIP-0056)
+## Repo map — planned (MIP-0056, MIP-0075)
 
 ```
+etl/
+  areas.json                         id, lat, lon, radius_km, beach_limit per area; copied from
+                                     marola-site's areas.json (MIP-0075)
 data/oods/
   README.md                          what this is, how to query, provenance, licence
   sources.json                       registry: id, institute, state, country, urls, cadence
@@ -66,7 +72,8 @@ workflow.
 
 ## Docs and AGENTS.md
 
-- [docs/3-development.md](docs/3-development.md): what `oods-check.yml` checks today versus once
+- [docs/3-development.md](docs/3-development.md): what `etl-inputs-check` checks in `etl/`,
+  what `oods-check.yml` checks today versus once
   MIP-0056 lands, and how to bump the pinned image.
 - [AGENTS.md](https://github.com/marola-dev/marola-oods/blob/main/AGENTS.md): what this repo is
   and where it differs from the umbrella's rules.

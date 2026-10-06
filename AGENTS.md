@@ -20,16 +20,19 @@ Non-negotiable in every marola repo; a repo may make these stricter, never loose
 ## What this repo is
 
 The Open Ocean Data Store (MIP-0056): a git-versioned, everyone-can-read store of Brazilian
-bathing-water samples under `data/oods/`. It starts **empty** — `README.md`, `docs/` and the
-`.gitkeep` that holds the directory's place are all this repo has until the first ingest run
+bathing-water samples under `data/oods/`. It starts **empty** — `README.md`, `docs/`, `etl/` and
+the `.gitkeep` that holds the directory's place are all this repo has until the first ingest run
 commits to it.
 
-- `data/oods/`: the only thing this repo is for. Its shape is MIP-0056 §5.1's: raw text per
+- `data/oods/`: what this repo is for. Its shape is MIP-0056 §5.1's: raw text per
   source/beach/year, derived Parquet partitions, a manifest, `sources.json`. Nobody edits it by
   hand — every commit under `data/` comes from marola-app's `oods-ingest.yml`.
 - The ingest code — the Scala fetchers, the DuckDB SQL transform, the planner, the workflow that
   commits here — lives in [marola-app](https://github.com/marola-dev/marola-app) as its `oods/`
   sbt module (MIP-0056 §5.2). This repo has no build, no sbt, no Python pipeline of its own.
+- `etl/`: small hand-kept inputs the MIP-0075 ETL workflows read (`areas.json`, copied from
+  marola-site's `site/areas.json`). Unlike `data/`, these are edited by hand, in a PR;
+  `scripts/etl-inputs-check.sh` checks their shape.
 - `scripts/oods-tree-check.sh`: every file under `data/oods/` other than `.gitkeep` is one of the
   formats MIP-0056 specifies (`.md`, `.json`, `.jsonl`, `.csv`, `.parquet`).
 - `scripts/app-image.sh`: the pinned app image in `marola-image`, the same pin shape marola-site
@@ -53,6 +56,7 @@ read-only; the workflow that actually commits data, `oods-ingest.yml`, lives in 
 nix develop               # the lint tools and the devkit's tools; links .devkit
 just quality              # every gate CI runs
 just oods-tree-check      # the shape check alone
+just etl-inputs-check     # etl/'s shape check alone
 just app-image            # print the pinned app image
 ```
 
@@ -63,7 +67,8 @@ The devkit's git hooks (`core.hooksPath .devkit/.githooks`, set by the dev shell
 
 `README.md` is the landing: what this repo is, its status, how to try it, the repo map and its
 contracts. There is no `docs/index.md`. `docs/` holds numbered pages (MIP-0074 §5.2); today just
-`docs/3-development.md` (what `oods-check.yml` checks and how to bump the pinned image) — a repo
+`docs/3-development.md` (what `oods-check.yml` and `etl-inputs-check` check and how to bump the
+pinned image) — a repo
 this small adds `1-design`/`2-libraries`/`4-reference` only if it grows into them.
 
 - **Links**: relative within `docs/` and from the README into `docs/`, written to work on GitHub.

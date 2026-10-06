@@ -1,7 +1,19 @@
 # Development
 
 This repo has no build: `data/oods/` is produced by marola-app's ingest code, never edited by
-hand. The only moving part here is the shape check.
+hand. The only moving parts here are the shape checks.
+
+## `etl-inputs-check`
+
+`etl/` holds the hand-kept inputs the MIP-0075 ETL workflows read; today just `etl/areas.json`,
+copied from
+[marola-site's `areas.json`](https://github.com/marola-dev/marola-site/blob/main/site/areas.json) (`id`, `lat`, `lon`, `radius_km`, `beach_limit` only).
+[`scripts/etl-inputs-check.sh`](https://github.com/marola-dev/marola-oods/blob/main/scripts/etl-inputs-check.sh)
+checks its shape with `jq`: every entry has all five fields with the right types, ids are unique,
+`lat`/`lon` fall inside Brazil's bounding box, and `radius_km`/`beach_limit` are positive.
+`just quality` and CI run it plainly and with `--self-test`, which feeds it a missing field, a
+duplicate id and a latitude outside Brazil (each must fail) and the real file (which must pass).
+When an area changes in marola-site, copy the change here by hand.
 
 ## `oods-check.yml` today vs. once MIP-0056 lands
 

@@ -11,6 +11,10 @@ default:
 oods-tree-check:
     scripts/oods-tree-check.sh
 
+# etl/'s hand-kept ETL inputs (areas.json today) have the shape their readers expect.
+etl-inputs-check:
+    scripts/etl-inputs-check.sh
+
 # The pinned app image oods-check.yml pulls and runs a smoke command against.
 app-image:
     scripts/app-image.sh
@@ -19,11 +23,13 @@ app-image:
 quality:
     #!/usr/bin/env bash
     set -euo pipefail
-    for tool in shellcheck actionlint agents-check docs-lint; do command -v "$tool" >/dev/null || { echo "quality: $tool not installed — run inside 'nix develop'" >&2; exit 1; }; done
+    for tool in shellcheck actionlint agents-check docs-lint jq; do command -v "$tool" >/dev/null || { echo "quality: $tool not installed — run inside 'nix develop'" >&2; exit 1; }; done
     shellcheck --severity=error scripts/*.sh
     actionlint
     scripts/oods-tree-check.sh
     scripts/oods-tree-check.sh --self-test
+    scripts/etl-inputs-check.sh
+    scripts/etl-inputs-check.sh --self-test
     scripts/app-image.sh --self-test
     agents-check
     docs-lint

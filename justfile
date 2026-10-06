@@ -20,6 +20,10 @@ app-image:
 lake-migrate *args:
     scripts/lake-migrate.sh {{args}}
 
+# The oods-lake agent skill: caps, attribution, evals, and every SQL block run on a local lake.
+skill-check *args:
+    scripts/skill-check.sh {{args}}
+
 # Every gate CI runs, plus docs-lint (MIP-0074 §7; no devkit workflow runs it in CI yet).
 quality:
     #!/usr/bin/env bash
@@ -31,6 +35,8 @@ quality:
     scripts/oods-tree-check.sh --self-test
     scripts/app-image.sh --self-test
     scripts/lake-migrate.sh --self-test
+    scripts/skill-check.sh
+    scripts/skill-check.sh --self-test
     agents-check
     docs-lint
 

@@ -20,7 +20,8 @@
       {
         devShells.default = pkgs.mkShell {
           name = "marola-oods";
-          packages = devkit.tools;
+          # jq: scripts/etl-inputs-check.sh.
+          packages = devkit.tools ++ [ pkgs.jq ];
           shellHook = devkit.shellHook + ''
             git config core.hooksPath .devkit/.githooks 2>/dev/null || true
             echo "marola-oods dev shell. Run 'just' to see available commands."

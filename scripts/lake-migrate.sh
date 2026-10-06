@@ -10,8 +10,8 @@
 #
 # --b2 is the §5.4 round trip: list catalog/oods.ducklake, download it (or start a new catalog,
 # only on a listing that succeeded and was empty; any failed listing stops), migrate, upload. It is
-# run by a person, after MIP-0075 §5.6's smoke test and with the bucket's lifecycle on "Keep only
-# the last version", never by CI. It reads OODS_S3_KEY_ID and OODS_S3_SECRET from the environment
+# run by a person, after MIP-0075 §5.6's smoke test and with the bucket's lifecycle set (30 days
+# of prior versions, docs/3-development.md), never by CI or an agent. It reads OODS_S3_KEY_ID and OODS_S3_SECRET from the environment
 # and hands them to duckdb on stdin as a session secret (never PERSISTENT) and to the AWS CLI as
 # AWS_* variables; it never prints them.
 #

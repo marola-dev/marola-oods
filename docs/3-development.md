@@ -72,8 +72,10 @@ migrate, then upload. A failed migration uploads nothing, and so does a run with
 It is a person's run, from a machine with the AWS CLI, and **never CI's**. Before the first one:
 
 1. MIP-0075 §5.6's smoke test has passed against the bucket.
-2. The bucket's lifecycle is "Keep only the last version" (Buckets → Lifecycle Settings), so the
-   catalog's old versions do not pile up.
+2. The bucket's lifecycle is set (Buckets → Lifecycle Settings). The `oods-lake` skill recommends
+   "Keep prior versions for this number of days: 30" over "Keep only the last version" (1 day):
+   the catalog's old versions, and the Parquet that maintenance deletes, stay restorable for the
+   same 30 days the lake keeps its snapshots, at a cost of a few MB.
 3. No ETL is running: there is one writer at a time, and an upload would lose its commits.
 
 ```bash
@@ -86,3 +88,30 @@ The endpoint is `https://s3.us-east-005.backblazeb2.com` (region `us-east-005`) 
 `s3://br-open-ocean-data-storage/lake/`; `OODS_BUCKET`, `OODS_S3_ENDPOINT` and `OODS_S3_REGION`
 override them. The key reaches DuckDB on stdin as a session secret, never `PERSISTENT`, and the AWS
 CLI as `AWS_*` variables; the script never prints it.
+
+## The `oods-lake` agent skill
+
+[`.claude/skills/oods-lake/`](https://github.com/marola-dev/marola-oods/tree/main/.claude/skills/oods-lake)
+gives an agent the lake's operational know-how: inspect read-only, plan a migration, recover a
+table or the catalog, plan maintenance, back up the catalog, read a `checks.sql` failure, and
+review the bucket's lifecycle, keys and size. `SKILL.md` is short (Inspect first, Decide, Safety,
+Verify) and loads `references/{inspect,migrations,recovery,maintenance,checks,b2}.md` on demand.
+It is ported from MIT and Apache-2.0 skills by DuckDB, MotherDuck, Backblaze, dbt Labs,
+Hopsworks and gordonmurray; its `NOTICE.md` credits each passage, pinned to a commit.
+
+Its one rule set: an agent never writes the bucket (no `--b2` without `--dry-run`, no workflow
+dispatch, no catalog upload), takes credentials only from `OODS_S3_*`, attaches `READ_ONLY` to
+inspect, passes `DATA_INLINING_ROW_LIMIT 0` on every write attach, dry-runs and asks before
+anything destructive, and never weakens a check to make it pass.
+
+```bash
+just skill-check                      # scripts/skill-check.sh: what just quality and CI run
+scripts/skill-check.sh --self-test    # each defect it should catch, caught
+```
+
+`skill-check.sh` checks the frontmatter and size caps, that `NOTICE.md` credits every source,
+the two eval scenarios in `evals/scenarios/`, and runs every ```` ```sql ```` block in the skill
+against a fresh local lake from `lake-migrate.sh`, seeded with `checks.sql`'s fixtures. A block
+whose first line is `-- needs: b2` is skipped and counted; `-- attach: write` gets the lake
+read-write, `-- attach: none` attaches its own; any other block gets it `READ_ONLY`. A changed
+DuckDB or DuckLake that breaks a documented query fails `just quality`.

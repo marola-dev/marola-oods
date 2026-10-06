@@ -38,6 +38,10 @@ commits to it.
   DuckLake schema as numbered migrations, applied to a local lake by `just lake-migrate` (and its
   self-test by `just quality`). Its `--b2` mode writes the bucket's catalog: a person runs it,
   never an agent and never CI.
+- `.claude/skills/oods-lake/`: the agent skill for operating that lake (inspect, migrate, recover,
+  maintain, B2), ported from licensed skills credited in its `NOTICE.md`; its Safety section is
+  binding for any agent touching the lake. `scripts/skill-check.sh` (in `just quality`) runs every
+  SQL block in it against a fresh local lake.
 
 ## What it consumes and produces (MIP-0070 §5.4)
 
@@ -69,7 +73,7 @@ The devkit's git hooks (`core.hooksPath .devkit/.githooks`, set by the dev shell
 `README.md` is the landing: what this repo is, its status, how to try it, the repo map and its
 contracts. There is no `docs/index.md`. `docs/` holds numbered pages (MIP-0074 §5.2); today just
 `docs/3-development.md` (what `oods-check.yml` checks, how to bump the pinned image, the lake
-schema's migrations) — a repo
+schema's migrations, the `oods-lake` skill) — a repo
 this small adds `1-design`/`2-libraries`/`4-reference` only if it grows into them.
 
 - **Links**: relative within `docs/` and from the README into `docs/`, written to work on GitHub.

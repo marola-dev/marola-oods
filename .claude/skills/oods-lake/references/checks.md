@@ -3,14 +3,13 @@
 The iron rule and the rationalizations table are adapted from dbt-labs/dbt-agent-skills
 `troubleshooting-dbt-job-errors` (Apache-2.0; [NOTICE.md](../NOTICE.md)); the rest is in-house.
 
-`specs/001-beach-persistence/contracts/checks.sql` holds the store's acceptance checks: the views'
-behaviour (US1, US3, US4) and FR-017, what `oods check` refuses before a batch commits (duplicate
-keys, values outside a vocabulary, a count without a unit, a bad UF or IBGE code, coordinates
-outside Brazil). Any failed check stops with its message.
+`lake/checks.sql` holds the store's acceptance checks: the views' behaviour (US1, US3, US4) and
+FR-017, what `oods check` refuses before a batch commits (duplicate keys, values outside a
+vocabulary, a count without a unit, a bad UF or IBGE code, coordinates outside Brazil). Any failed check stops with its message.
 
 ```bash
-cd specs/001-beach-persistence/contracts && duckdb -bail :memory: < checks.sql   # "checks: all passed"
-scripts/lake-migrate.sh --self-test                                              # also runs it inside a migrated lake
+cd lake && duckdb -bail :memory: < checks.sql   # "checks: all passed"
+scripts/lake-migrate.sh --self-test             # also runs it inside a migrated lake
 ```
 
 ## The iron rule

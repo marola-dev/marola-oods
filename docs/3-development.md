@@ -22,11 +22,10 @@ it on the next push or PR touching `data/` or `marola-image`.
 ## The lake schema
 
 The DuckLake that MIP-0075 keeps on Backblaze B2 gets its tables from numbered migrations in
-`specs/001-beach-persistence/contracts/migrations/`, applied by
-[`scripts/lake-migrate.sh`](https://github.com/marola-dev/marola-oods/blob/main/scripts/lake-migrate.sh).
-`0001_init.sql` creates MIP-0075 §5.2's nine tables (`beach`, `facility`, `trail`, `source`,
-`point`, `sample`, `water_position`, `fetch_partition`, `fetch_run`), partitions `sample` by
-`source_id` and `year(sampled_on)`, and creates `schema_migration(version, name, applied_at)`.
+`lake/migrations/`, next to `lake/views.sql` and `lake/checks.sql`: together, the lake's
+contract. `0001_init.sql` creates MIP-0075 §5.2's nine tables (`beach`, `facility`, `trail`,
+`source`, `point`, `sample`, `water_position`, `fetch_partition`, `fetch_run`), partitions
+`sample` by `source_id`, and creates `schema_migration(version, name, checksum, applied_at)`.
 DuckLake has no keys or check constraints, so the keys are comments in the file and `checks.sql`
 enforces them; `NOT NULL` is enforced and marks the key columns. A column §5.2 does not spell out
 is commented `derived` there.
@@ -37,57 +36,49 @@ just lake-migrate --dry-run           # list what is pending, change nothing
 scripts/lake-migrate.sh --self-test   # what just quality runs
 ```
 
+That local lake is what the ETL is developed against: in a marola-app checkout, point the store's
+catalog at `.tmp/lake/oods.ducklake` and its data path at `.tmp/lake/data/`.
+
 How a run works:
 
 - Every `NNNN_name.sql` whose version is not in `schema_migration` runs in order, each in one
-  transaction together with its `schema_migration` row. A failing migration rolls back whole: no
-  table, no row, no snapshot; the script stops and exits non-zero.
-- Then `views.sql` is re-applied, in its own transaction, but only when that would change a stored
-  view: every `CREATE OR REPLACE VIEW` is a new snapshot even with the same text, and a run with
-  nothing to do must make none.
+  transaction together with its `schema_migration` row and the file's md5. A failing migration
+  rolls back whole: no table, no row, no snapshot; the script stops and exits non-zero.
+- Two files with the same version, or an applied file whose md5 no longer matches its row, stop
+  the run before anything is applied.
+- Then `views.sql` is re-applied, in its own transaction, only when its md5 differs from the row
+  with version 0, which the same transaction replaces. Every `CREATE OR REPLACE VIEW` is a new
+  snapshot even with the same text, and a run with nothing to do must make none.
 - One status line per step on stderr (`lake-migrate: applied 0001_init`), then
   `lake-migrate: at version N`, or `lake-migrate: up to date (version N)`.
 - The catalog is attached with `DATA_INLINING_ROW_LIMIT 0`, so every row is Parquet under the data
   path and the catalog holds metadata only (MIP-0075 §4.4).
 
 DuckDB comes from the dev shell (`flake.nix`, 1.5.5 or newer). The first run installs the
-`ducklake` extension (and `httpfs`, for `--b2` and the self-test) into `.tmp/duckdb-ext/`, which
-needs the network once; CI downloads the pinned DuckDB 1.5.5 CLI release for the self-test.
+`ducklake` extension into `.tmp/duckdb-ext/`, which needs the network once; CI downloads the
+pinned DuckDB 1.5.5 CLI release for the self-test.
 
 ### Adding a migration
 
 Add `0002_what_it_does.sql` next to `0001_init.sql`: four digits, then lower-case words. A
 migration is plain DuckDB SQL against the lake's tables, without `BEGIN`/`COMMIT` and without
-touching `schema_migration`; the script does both. Never edit a migration that has run against
-the bucket: add the next one. If it changes a column `views.sql` or `checks.sql` reads, change
-those in the same PR, and run `just quality`: the self-test migrates an empty lake, loads
-`checks.sql`'s fixtures into it, and fails on a column whose name or type differs.
+touching `schema_migration`; the script does both. Never edit a migration once it is in a tagged
+release: add the next one (the checksum refuses an edited one). If it changes a column
+`views.sql` or `checks.sql` reads, change those in the same PR, and run `just quality`: the
+self-test migrates an empty lake, loads `checks.sql`'s fixtures into it, and fails on a column
+whose name or type differs.
 
-### The bucket's catalog (`--b2`)
+### The bucket's catalog
 
-`--b2` applies the same migrations to `catalog/oods.ducklake` in `br-open-ocean-data-storage` by
-MIP-0075 §5.4's round trip: list the key, download it (or start a new catalog, only when the
-listing succeeded and was empty; a refused or failed listing stops before anything is written),
-migrate, then upload. A failed migration uploads nothing, and so does a run with nothing to do.
-It is a person's run, from a machine with the AWS CLI, and **never CI's**. Before the first one:
+Nothing in this repo writes the bucket. marola-app's `DuckLakeStore` applies the same pending
+migrations and `views.sql` by the same rules when it attaches `catalog/oods.ducklake`, inside a
+job in the `oods-lake` concurrency group, so a schema change never races an ETL run. The first
+such run (MIP-0075.tasks row 11's `beach-etl.yml`) creates the catalog.
 
-1. MIP-0075 §5.6's smoke test has passed against the bucket.
-2. The bucket's lifecycle is set (Buckets → Lifecycle Settings). The `oods-lake` skill recommends
-   "Keep prior versions for this number of days: 30" over "Keep only the last version" (1 day):
-   the catalog's old versions, and the Parquet that maintenance deletes, stay restorable for the
-   same 30 days the lake keeps its snapshots, at a cost of a few MB.
-3. No ETL is running: there is one writer at a time, and an upload would lose its commits.
-
-```bash
-export OODS_S3_KEY_ID=…  OODS_S3_SECRET=…   # the read-write application key; never commit them
-scripts/lake-migrate.sh --b2 --dry-run      # the listing, the download, what is pending; uploads nothing
-scripts/lake-migrate.sh --b2                # migrate and upload catalog/oods.ducklake
-```
-
-The endpoint is `https://s3.us-east-005.backblazeb2.com` (region `us-east-005`) and the data path
-`s3://br-open-ocean-data-storage/lake/`; `OODS_BUCKET`, `OODS_S3_ENDPOINT` and `OODS_S3_REGION`
-override them. The key reaches DuckDB on stdin as a session secret, never `PERSISTENT`, and the AWS
-CLI as `AWS_*` variables; the script never prints it.
+A schema change reaches the bucket in three steps: the migration merges here; a person tags
+`vX.Y.Z` and `release.yml` attaches `marola-oods-lake-vX.Y.Z.tar.gz` (`just lake-contract vX.Y.Z`
+builds the same bytes locally); marola-app bumps `lake-contract.version` and the image, and the
+next `oods-lake` job migrates the catalog.
 
 ## The `oods-lake` agent skill
 
@@ -99,8 +90,7 @@ Verify) and loads `references/{inspect,migrations,recovery,maintenance,checks,b2
 It is ported from MIT and Apache-2.0 skills by DuckDB, MotherDuck, Backblaze, dbt Labs,
 Hopsworks and gordonmurray; its `NOTICE.md` credits each passage, pinned to a commit.
 
-Its one rule set: an agent never writes the bucket (no `--b2` without `--dry-run`, no workflow
-dispatch, no catalog upload), takes credentials only from `OODS_S3_*`, attaches `READ_ONLY` to
+Its one rule set: an agent never writes the bucket (no workflow dispatch, no catalog upload), takes credentials only from `OODS_S3_*`, attaches `READ_ONLY` to
 inspect, passes `DATA_INLINING_ROW_LIMIT 0` on every write attach, dry-runs and asks before
 anything destructive, and never weakens a check to make it pass.
 

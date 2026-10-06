@@ -34,10 +34,11 @@ commits to it.
   formats MIP-0056 specifies (`.md`, `.json`, `.jsonl`, `.csv`, `.parquet`).
 - `scripts/app-image.sh`: the pinned app image in `marola-image`, the same pin shape marola-site
   and marola-ml use.
-- `specs/001-beach-persistence/contracts/migrations/` and `scripts/lake-migrate.sh`: MIP-0075's
-  DuckLake schema as numbered migrations, applied to a local lake by `just lake-migrate` (and its
-  self-test by `just quality`). Its `--b2` mode writes the bucket's catalog: a person runs it,
-  never an agent and never CI.
+- `lake/`: MIP-0075's DuckLake contract, `migrations/NNNN_*.sql`, `views.sql` and `checks.sql`.
+  `scripts/lake-migrate.sh` applies it to a local lake only (`just lake-migrate`, self-tested by
+  `just quality`); the bucket's catalog is migrated by marola-app's `DuckLakeStore` inside an
+  `oods-lake` job. A `v*` tag (a person's act) attaches `marola-oods-lake-<tag>.tar.gz`
+  (`release.yml`, `scripts/lake-contract.sh`), which marola-app pins.
 - `.claude/skills/oods-lake/`: the agent skill for operating that lake (inspect, migrate, recover,
   maintain, B2), ported from licensed skills credited in its `NOTICE.md`; its Safety section is
   binding for any agent touching the lake. `scripts/skill-check.sh` (in `just quality`) runs every
@@ -50,6 +51,7 @@ commits to it.
 | app → oods | marola-app's `oods-ingest.yml` commits new raw/Parquet files here, filtered by state/city/source (MIP-0056 §5.4) |
 | oods → app | `MAROLA_WATER_CACHE_DIR=marola-oods/data/oods/latest`, once the app's opt-in export lands (MIP-0056 §5.5) |
 | oods → umbrella | `README.md` and `docs/`, aggregated into docs.marola.dev (`notify-umbrella.yml`) |
+| oods → app | `marola-oods-lake-<tag>.tar.gz` on each `v*` release: `lake/`, pinned in marola-app's `lake-contract.version` (MIP-0075.tasks row 4) |
 | app → oods-check | `marola-image`: the pinned app image this repo's own CI pulls and smoke-tests, never builds |
 
 No workflow here writes to this repo. `oods-check.yml` only pulls and runs the pinned app image

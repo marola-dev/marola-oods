@@ -137,8 +137,8 @@ IBGE code, municipality, point name, beach name, location reference, the latest 
 of the recent samples were proper (e.g. `4/5`, `0.80`), agency coordinates, marola's in-water
 coordinates.
 
-**Independent test**: [contracts/checks.sql](contracts/checks.sql) loads fixture rows into DuckDB,
-applies [contracts/views.sql](contracts/views.sql), and asserts exact rows, including a point with
+**Independent test**: [lake/checks.sql](../../lake/checks.sql) loads fixture rows into DuckDB,
+applies [lake/views.sql](../../lake/views.sql), and asserts exact rows, including a point with
 only unknown samples and one with none.
 
 **Acceptance scenarios**:
@@ -271,7 +271,7 @@ two `fetch_run` rows.
 - **FR-007**: BALNEABILIDADE MUST be exposed two ways, never merged: the agency's newest verdict
   (`condition` + `agency_label`), and marola's proper share over the last `N` deduplicated
   samples (`proper_count`, `classified_count`, `proper_ratio`; `N = 5`, CONAMA 274's window).
-- **FR-008**: [contracts/views.sql](contracts/views.sql) MUST define `sample_dedup`,
+- **FR-008**: [lake/views.sql](../../lake/views.sql) MUST define `sample_dedup`,
   `latest_per_point`, `point_fitness`, `beach_point` and `beach_card` in DuckDB SQL over the
   lake's tables, stored in the catalog, so the same file runs over the bucket, a local lake and
   the checks' fixtures.
@@ -295,7 +295,7 @@ two `fetch_run` rows.
   step leaves the previous catalog and exports in place.
 - **FR-016**: Hosts flagged `brazil_only` in `etl/sources.json` MUST go through the Brazil proxy;
   every other host, B2 and Overpass included, MUST go direct.
-- **FR-017**: `oods check` MUST run every assertion of [contracts/checks.sql](contracts/checks.sql)'s
+- **FR-017**: `oods check` MUST run every assertion of [lake/checks.sql](../../lake/checks.sql)'s
   kind (keys unique, vocabularies, coordinates in Brazil's box, units on counts) over a batch
   before it is committed; a batch that fails is rolled back.
 - **FR-018**: Keys MUST never be logged or written to the bucket: the app holds them in a type

@@ -1,7 +1,7 @@
 -- 0001_init: the lake's nine tables (MIP-0075 §5.2) and schema_migration, in DuckDB SQL inside a
--- DuckLake. scripts/lake-migrate.sh runs each migration file in one transaction with its
--- schema_migration row; a migration file never says BEGIN or COMMIT, and never writes
--- schema_migration.
+-- DuckLake. Each migration file runs in one transaction with its schema_migration row (written by
+-- scripts/lake-migrate.sh locally, by marola-app's DuckLakeStore on the bucket); a migration file
+-- never says BEGIN or COMMIT, and never writes schema_migration.
 --
 -- DuckLake has no primary keys, unique or check constraints: each table's key is a comment here
 -- and is enforced by checks.sql (oods check) before a batch commits. NOT NULL is enforced, so it
@@ -11,11 +11,13 @@
 -- The column names and types match the fixtures in checks.sql and what views.sql reads; the
 -- lake-migrate self-test compares them. A column §5.2 does not spell out is marked "derived".
 
--- key version; one row per applied migration, inserted by lake-migrate.sh in the migration's own
--- transaction (MIP-0075 row 22). Created here, so a lake that fails 0001 has no trace of it.
+-- key version; one row per applied migration, inserted in the migration's own transaction, plus
+-- version 0 for views.sql, replaced whenever views.sql's md5 changes. A migration whose md5 no
+-- longer matches its row is refused. Created here, so a lake that fails 0001 has no trace of it.
 create table schema_migration (
   version    integer not null,
-  name       varchar not null,    -- the file's name without .sql: 0001_init
+  name       varchar not null,    -- the file's name without .sql: 0001_init; 'views' for version 0
+  checksum   varchar not null,    -- md5 of the file's bytes
   applied_at timestamptz not null
 );
 
@@ -96,7 +98,9 @@ create table sample (
   indicator_qualifier varchar,          -- exact | below | above
   unit                varchar           -- NMP/100mL | UFC/100mL
 );
-alter table sample set partitioned by (source_id, year(sampled_on));
+-- source_id only: a whole source's history is a few MB, and DuckLake's per-file min/max stats on
+-- sampled_on prune a date filter without a year partition.
+alter table sample set partitioned by (source_id);
 
 -- key (source_id, point_key); mirrored from etl/water-positions.csv, never authored by the ETL
 create table water_position (

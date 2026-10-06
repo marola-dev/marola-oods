@@ -20,7 +20,7 @@ set -euo pipefail
 export LC_ALL=C.UTF-8
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-contracts="$root/specs/001-beach-persistence/contracts"
+contracts="$root/lake"
 ext_dir="${DUCKDB_EXTENSION_DIR:-$root/.tmp/duckdb-ext}"
 
 # owner/repo|licence: every source issue #23's reference table names.

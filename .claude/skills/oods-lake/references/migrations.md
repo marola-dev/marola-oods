@@ -5,25 +5,27 @@ Written in-house: no reference covers `lake-migrate.sh`. The full contract is
 
 ## The shape
 
-- Files: `specs/001-beach-persistence/contracts/migrations/NNNN_name.sql`, four digits, then
-  lower-case words. Plain DuckDB SQL, no `BEGIN`/`COMMIT`, never touching `schema_migration`.
-- `scripts/lake-migrate.sh` runs each pending file in one transaction with its
-  `schema_migration` row, then re-applies `views.sql` only if a stored view would change (every
-  `CREATE OR REPLACE VIEW` is a new snapshot, even with the same text).
-- A migration that has run against the bucket is never edited: add the next one.
-- If it changes a column that `views.sql` or `checks.sql` reads, change those in the same PR.
+- Files: `lake/migrations/NNNN_name.sql`, four digits, then lower-case words, one version per
+  file. Plain DuckDB SQL, no `BEGIN`/`COMMIT`, never touching `schema_migration`.
+- `scripts/lake-migrate.sh` runs each pending file in one transaction with its `schema_migration`
+  row (version, name, the file's md5), then re-applies `lake/views.sql` only when its md5 differs
+  from the version-0 row (every `CREATE OR REPLACE VIEW` is a new snapshot, even with the same
+  text).
+- An applied migration is never edited: its md5 no longer matches and the run stops. Add the next
+  one. If it changes a column that `views.sql` or `checks.sql` reads, change those in the same PR.
+- The bucket's catalog is migrated by marola-app's `DuckLakeStore` on attach, inside an
+  `oods-lake` job, from the contract marola-app pins; never by `lake-migrate.sh`.
 
 ## The workflow an agent may run
 
 ```bash
 just lake-migrate --dry-run                 # what is pending against .tmp/lake/
 just lake-migrate                           # apply it to the local lake
-scripts/lake-migrate.sh --b2 --dry-run      # with a person's OODS_S3_* exported: lists, downloads, plans; uploads nothing
 just quality                                # the self-test migrates an empty lake and loads checks.sql's fixtures
 ```
 
-`scripts/lake-migrate.sh --b2` without `--dry-run` uploads the catalog: a person runs it, after
-the PR merged, with no `oods-lake` job running. Your output is the PR and that one line for them.
+Your output is the PR. The bucket picks the migration up on the first `oods-lake` run after the
+new contract tag is pinned in marola-app.
 
 ## Try a migration before writing the file
 
@@ -56,8 +58,8 @@ SELECT count(*) AS rows_left FROM beach WHERE beach_name = 'Praia Nova';
 ## Where the lake is
 
 ```sql
-SELECT version, name, applied_at FROM schema_migration ORDER BY version;
+SELECT version, name, checksum, applied_at FROM schema_migration ORDER BY version;
 ```
 
-The bucket's catalog is at the version a person last ran `--b2` with; `--b2 --dry-run` prints
-what it would apply. A local lake ahead of the bucket is normal while a PR is open.
+Version 0 is `views.sql`. The bucket's catalog is at the version of the contract the last
+`oods-lake` run's image carried. A local lake ahead of the bucket is normal while a PR is open.

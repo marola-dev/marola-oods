@@ -25,6 +25,7 @@ just quality              # every gate CI runs, plus docs-lint
 just oods-tree-check      # the shape check alone
 just app-image            # print the pinned app image
 just lake-migrate         # build or migrate a local DuckLake under .tmp/lake/
+just lake-contract v0.1.0 # lake/ as the release tarball marola-app pins
 just skill-check          # the oods-lake agent skill's checks, its SQL run on a fresh local lake
 ```
 
@@ -34,13 +35,13 @@ The first `just quality` or `just lake-migrate` downloads DuckDB's `ducklake` ex
 ## Repo map — the lake (MIP-0075)
 
 ```
-specs/001-beach-persistence/
-  spec.md                            what the beach and water-quality store must do
-  contracts/
-    migrations/0001_init.sql         the nine tables and schema_migration; sample partitioned by source_id, year
-    views.sql                        the read views, stored in the lake's catalog
-    checks.sql                       the executable acceptance checks (oods check)
-scripts/lake-migrate.sh              applies pending migrations and views.sql: a local lake, or --b2 by a person
+specs/001-beach-persistence/spec.md  what the beach and water-quality store must do
+lake/                                the lake's contract, shipped to marola-app as a v* release tarball
+  migrations/0001_init.sql           the nine tables and schema_migration; sample partitioned by source_id
+  views.sql                          the read views, stored in the lake's catalog
+  checks.sql                         the executable acceptance checks (oods check)
+scripts/lake-migrate.sh              applies pending migrations and views.sql to a local lake
+scripts/lake-contract.sh             lake/ as marola-oods-lake-<tag>.tar.gz (release.yml)
 .claude/skills/oods-lake/            the agent skill for operating the lake: inspect, migrate, recover, maintain, B2
 scripts/skill-check.sh               the skill's test: caps, attribution, evals, every SQL block on a local lake
 ```

@@ -11,7 +11,9 @@ The lake is one DuckDB catalog file, `catalog/oods.ducklake`, plus Parquet under
 the B2 bucket `br-open-ocean-data-storage` (endpoint `s3.us-east-005.backblazeb2.com`). A job
 downloads the catalog, commits, and uploads it back, so **there is one writer at a time**: every
 job that writes the lake shares the `oods-lake` concurrency group. `scripts/lake-migrate.sh`
-builds the same lake locally under `.tmp/lake/`, and that copy is yours to break.
+builds the same lake locally under `.tmp/lake/` from `lake/migrations/`, and that copy is yours
+to break. The bucket's catalog gets those migrations only from marola-app's `DuckLakeStore`, on
+attach inside an `oods-lake` job.
 
 ## Inspect first
 
@@ -39,9 +41,9 @@ Queries: [references/inspect.md](references/inspect.md).
 
 Stated once; every reference follows it.
 
-- **An agent never writes the bucket.** No `lake-migrate.sh --b2` without `--dry-run`, no
-  workflow dispatch, no catalog upload, no `aws s3 cp`/`rm`/`put-*` to it, no lifecycle change, no
-  maintenance function against its catalog. You write the plan; a person runs it.
+- **An agent never writes the bucket.** No workflow dispatch, no catalog upload, no
+  `aws s3 cp`/`rm`/`put-*` to it, no lifecycle change, no maintenance function against its
+  catalog. You write the plan; a person runs it.
 - **Credentials come from the environment only** (`OODS_S3_KEY_ID`, `OODS_S3_SECRET`): never
   echoed, logged, written to a file, or put in a `PERSISTENT` secret. Never run `b2 key *`,
   `b2 account get`, or read `~/.b2_account_info`. A key pasted into the chat: say it must be

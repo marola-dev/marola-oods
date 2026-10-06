@@ -58,7 +58,7 @@ ATTACH 'ducklake:<work_dir>/oods.ducklake' AS lake (READ_ONLY);  -- <work_dir>: 
 SELECT count(*) FROM lake.snapshots();
 ```
 
-`lake-migrate.sh` uses `URL_STYLE 'vhost'`; whether DuckDB's httpfs reaches B2 with `vhost`, or
+The ETL's store uses `URL_STYLE 'vhost'`; whether DuckDB's httpfs reaches B2 with `vhost`, or
 needs `path`, is not tested live yet.
 
 ## Snapshots and schema version

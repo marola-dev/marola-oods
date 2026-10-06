@@ -6,9 +6,12 @@ the retention and orphan rules from gordonmurray `iceberg` (MIT); "maintenance i
 who, when, thresholds" and `ducklake_flush_inlined_data` from motherduckdb `motherduck-ducklake`
 (MIT). See [NOTICE.md](../NOTICE.md). Function signatures checked on DuckDB 1.5.5's `ducklake`.
 
-DuckLake never deletes a file on its own. Nothing runs on a schedule today: maintenance is a
-person's run against the bucket, inside the catalog round trip, with no `oods-lake` job running.
-An agent runs it freely on the local lake and, for the bucket, writes the plan.
+DuckLake never deletes a file on its own. Once MIP-0075.tasks row 11 lands, `beach-etl.yml`'s
+`oods maintain` step expires snapshots older than 30 days every Monday, inside `oods-lake`; that
+is the workflow's job, not a destructive step to gate. Everything else here (merge, cleanup,
+orphans, a shorter window) is a person's run against the bucket, inside the catalog round trip,
+with no `oods-lake` job running. An agent runs it freely on the local lake and, for the bucket,
+writes the plan.
 
 ## The functions (DuckDB 1.5.5)
 

@@ -10,8 +10,8 @@ Two layers can bring the lake back:
 | Broke | Comes back from | Window |
 |---|---|---|
 | rows (a bad run committed) | the lake's own snapshots: `AT (VERSION => n)` | until `ducklake_expire_snapshots` removes them (30 days, [maintenance.md](maintenance.md)) |
-| the catalog file (a bad upload, a lost commit) | B2's previous versions of `catalog/oods.ducklake` | the bucket's lifecycle: 30 days with the rule [b2.md](b2.md) recommends; 1 day with "Keep only the last version" |
-| Parquet that cleanup deleted | B2's hidden versions under `lake/` | the same lifecycle window |
+| the catalog file (a bad upload, a lost commit) | a named copy under `catalog/backup/` (§3); R2 keeps no old versions | the backups kept: 30 days with the lifecycle rule [r2.md](r2.md) recommends |
+| Parquet that cleanup deleted | nothing: R2 keeps no deleted objects | none; cleanup waits 30 days, so a backup up to 30 days old still finds its newest snapshot's files ([maintenance.md](maintenance.md)) |
 
 ## 1. Find the snapshot before the damage
 
@@ -75,28 +75,27 @@ ATTACH 'ducklake:.tmp/lake/oods.ducklake.bak' AS restored (READ_ONLY);
 SELECT count(*) AS snapshots_in_backup FROM restored.snapshots();
 ```
 
-On B2 the bucket's own versions are the backups: every upload of `catalog/oods.ducklake` keeps
-the previous one as a version for as long as the lifecycle allows. Take a named copy (`aws s3 cp`
-to `catalog/backup/oods-<date>.ducklake`, a person's write) **after** maintenance, never before:
-the guide says compaction and cleanup "should only be done before manual backups", because they
-remove files an older catalog still points at.
+On R2 an upload replaces the only copy, so the named copies are the backups: `aws s3 cp` of the
+catalog to `catalog/backup/oods-<date>.ducklake` (a person's write, with no `oods-lake` job
+running), kept 30 days by the lifecycle rule in [r2.md](r2.md). Take it **after** maintenance,
+never before: the guide says compaction and cleanup "should only be done before manual backups",
+because they remove files an older catalog still points at.
 
-## 4. Restore the catalog from a B2 version (read-only for an agent until the last step)
+## 4. Restore the catalog from a backup (read-only for an agent until the last step)
 
 ```bash
-# list every version of the catalog, newest first; DeleteMarker is a B2 hide marker
-AWS_ACCESS_KEY_ID="$OODS_S3_KEY_ID" AWS_SECRET_ACCESS_KEY="$OODS_S3_SECRET" AWS_DEFAULT_REGION=us-east-005 \
-  aws --endpoint-url https://s3.us-east-005.backblazeb2.com s3api list-object-versions \
-  --bucket br-open-ocean-data-storage --prefix catalog/oods.ducklake \
-  --query '{v: Versions[].[VersionId, LastModified, Size, IsLatest], d: DeleteMarkers[].[VersionId, LastModified]}'
+# list the backups, newest last
+AWS_ACCESS_KEY_ID="$OODS_S3_KEY_ID" AWS_SECRET_ACCESS_KEY="$OODS_S3_SECRET" AWS_DEFAULT_REGION=auto \
+  aws --endpoint-url "https://$OODS_S3_ENDPOINT" s3api list-objects-v2 \
+  --bucket br-open-ocean-data-storage --prefix catalog/backup/ \
+  --query 'Contents[].[Key, LastModified, Size]'
 
-# download one version to a temp file (a read; the bucket is unchanged)
-aws ... s3api get-object --bucket br-open-ocean-data-storage --key catalog/oods.ducklake \
-  --version-id <VersionId> "$work/oods.ducklake"
+# download one to a temp file (a read; the bucket is unchanged)
+aws ... s3 cp --only-show-errors s3://br-open-ocean-data-storage/catalog/backup/oods-<date>.ducklake "$work/oods.ducklake"
 ```
 
 Attach the download `READ_ONLY` ([inspect.md](inspect.md)) and check it: its newest snapshot,
 `schema_migration`, and that its files exist (`ducklake_list_files` against the bucket listing).
-Putting it back is uploading it as the current version: a person's step, with no job running,
-waiting ≥ 1 s after any other write of the same key. Data files the restored catalog names but
-cleanup deleted come back the same way, by version id, while the lifecycle still keeps them.
+A file it names that cleanup deleted is gone; the agencies remain the source, and a backfill
+rebuilds those rows. Putting it back is uploading it over `catalog/oods.ducklake`: a person's
+step, with no job running, after a backup of the catalog it replaces.

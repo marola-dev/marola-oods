@@ -1,13 +1,13 @@
-# Feature Specification: The open ocean data store, a DuckLake on Backblaze B2, beaches first
+# Feature Specification: The open ocean data store, a DuckLake on Cloudflare R2, beaches first
 
 **Feature branch**: `001-beach-persistence`
-**Created**: 2026-10-02 (rewritten 2026-10-05: Supabase → Backblaze B2, the beach ETL first)
+**Created**: 2026-10-02 (rewritten 2026-10-05: Supabase → DuckLake, the beach ETL first; 2026-10-07: Backblaze B2 → Cloudflare R2)
 **Status**: Draft. This spec is what people agree on; the design and the tasks are [MIP-0075](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md) and [its task list](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075.tasks.md), the MIP marola-dev/marola-oods#1 requires before any code
 **Input**: "Bulk-import some states' beach and water-quality data, so marola stops querying the
 sources on every build. The ETL runs on the marola-app stack (Scala 3, Kyo, same discipline) as a
-GitHub Actions job." Revised by the maintainer on 2026-10-05: the store is the Backblaze B2 bucket
-`br-open-ocean-data-storage` (R2 asked for a credit card), as a DuckLake; the first ETL is the
-beaches, the second the water quality.
+GitHub Actions job." Revised by the maintainer on 2026-10-05: the store is a DuckLake in the bucket
+`br-open-ocean-data-storage`; the first ETL is the beaches, the second the water quality. On
+2026-10-07 (marola-dev/marola#691) the bucket moved to Cloudflare R2.
 
 Scope, in delivery order:
 
@@ -25,11 +25,11 @@ database for per-request queries (MIP-0075 §9), and states beyond SC, RJ and BA
 
 | | |
 |---|---|
-| Provider | Backblaze B2, S3-compatible API, no card on the account: usage above the free tier is refused, never billed |
-| Bucket | `br-open-ocean-data-storage`, private, server-side encryption on, Object Lock off (created 2026-10-05, bucket id `7dda9ac99fd008c8aa1c0218`) |
-| Endpoint | `s3.us-east-005.backblazeb2.com`, region `us-east-005` |
-| Free tier | 10 GB stored; downloads free up to 3× the stored data a month |
-| ETL key | read-write, this bucket only: id in the variable `BACKBLAZE_ETL_KEY_ID`, key name in `BACKBLAZE_ETL_KEY_NAME`, secret in `BACKBLAZE_ETL_APP_KEY` (marola-oods, set 2026-10-05) |
+| Provider | Cloudflare R2, S3-compatible API, no egress fee; the account needs a payment method, and use above the free tier is billed to it |
+| Bucket | `br-open-ocean-data-storage`, private (no public URL), location Automatic, Standard class; no object versioning. Created by the maintainer ([MIP-0075 §5.6](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#56-what-a-person-sets-up-in-cloudflare)) |
+| Endpoint | `<ACCOUNT_ID>.r2.cloudflarestorage.com`, region `auto`, path-style URLs |
+| Free tier | 10 GB-month stored, 1 million Class A and 10 million Class B operations a month; downloads free |
+| ETL token | an R2 Account API token, Object Read & Write, this bucket only: secrets `CLOUDFLARE_R2_ACCESS_KEY_ID` and `CLOUDFLARE_R2_SECRET_ACCESS_KEY`, variables `CLOUDFLARE_R2_ACCOUNT_ID` and `CLOUDFLARE_R2_TOKEN_NAME` (marola-oods) |
 | Format | DuckLake: tables as Parquet files under `lake/`, and a catalog (a DuckDB file) under `catalog/` that records every table, file and snapshot ([MIP-0075 §4.4](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#44-the-table-format-ducklake)) |
 | Client | DuckDB with its `ducklake` and `httpfs` extensions and a `TYPE s3` secret |
 
@@ -181,7 +181,7 @@ it into `beach_point`.
 
 The same ETL loads INEA/RJ and INEMA/BA, whose hosts answer only Brazilian IPs, through the
 `MAROLA_BR_PROXY` route (marola-dev/marola-site#20). Their points get curated coordinates; their
-samples carry no counts. B2 is always reached directly.
+samples carry no counts. R2 is always reached directly.
 
 **Why this priority**: two of the three states marola shows today; blocked on a person
 provisioning the proxy, so it cannot be P1.
@@ -223,7 +223,7 @@ two `fetch_run` rows.
 
 - A beach renamed in OSM: a new row under the new name, the old one deleted in the same
   transaction. The tables mirror OSM; the lake's snapshots keep the earlier state for 30 days
-  ([MIP-0075 §4.3](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#43-the-store-backblaze-b2)).
+  ([MIP-0075 §4.3](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#43-the-store-cloudflare-r2)).
 - A monitoring point disappears from the agency's feed: it stays in `point` with
   `last_seen` frozen; never deleted.
 - The agency renames a beach or moves a point: `point_key` is the agency's stable id, so the row
@@ -240,8 +240,8 @@ two `fetch_run` rows.
   ([MIP-0075 §5.4](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#54-the-etl)).
 - Two jobs at once: they would each upload their own catalog and one would lose the other's
   commits, so every job that writes the lake shares one `concurrency` group and runs alone.
-- The free tier full (10 GB): B2 refuses the upload; the run is `failed` with `StoreFull`, nothing
-  is billed. At the sizes in [MIP-0075 §4.3](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#43-the-store-backblaze-b2) this is three
+- Past the free tier (10 GB): R2 bills the overage to the account's payment method, and the
+  maintainer's usage notification warns first. At the sizes in [MIP-0075 §4.3](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#43-the-store-cloudflare-r2) this is three
   orders of magnitude away.
 
 ## Requirements *(mandatory)*
@@ -249,13 +249,13 @@ two `fetch_run` rows.
 ### Functional requirements
 
 - **FR-001**: The store MUST be a DuckLake whose data path is
-  `s3://br-open-ocean-data-storage/lake/` on `s3.us-east-005.backblazeb2.com`, with its catalog
+  `s3://br-open-ocean-data-storage/lake/` on `<ACCOUNT_ID>.r2.cloudflarestorage.com`, with its catalog
   kept as `catalog/oods.ducklake` in the same bucket, laid out as [MIP-0075 §5.2](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#52-the-layout)
-  says. Data inlining is off, so every row lives in a Parquet file in B2, not in the catalog.
+  says. Data inlining is off, so every row lives in a Parquet file in R2, not in the catalog.
 - **FR-002**: The app MUST reach the store only through DuckDB's `ducklake` and `httpfs`
   extensions with a `TYPE s3` secret
   built from `OODS_S3_KEY_ID`, `OODS_S3_SECRET`, `OODS_S3_ENDPOINT`, `OODS_S3_REGION` and
-  `OODS_BUCKET`; the workflow maps the `BACKBLAZE_ETL_*` names to these, so the app names no
+  `OODS_BUCKET`; the workflow maps the `CLOUDFLARE_R2_*` names to these, so the app names no
   provider and tests point the same variables at MinIO.
 - **FR-003**: The beach ETL MUST, per area, replace that area's rows in `beach`, `facility` and
   `trail` in one transaction and export one `BeachSnapshot` v1 JSON, reusing `BeachFinder`,
@@ -294,7 +294,7 @@ two `fetch_run` rows.
   catalog is uploaded after the last commit, and the exports after the catalog, so a crash at any
   step leaves the previous catalog and exports in place.
 - **FR-016**: Hosts flagged `brazil_only` in `etl/sources.json` MUST go through the Brazil proxy;
-  every other host, B2 and Overpass included, MUST go direct.
+  every other host, R2 and Overpass included, MUST go direct.
 - **FR-017**: `oods check` MUST run every assertion of [lake/checks.sql](../../lake/checks.sql)'s
   kind (keys unique, vocabularies, coordinates in Brazil's box, units on counts) over a batch
   before it is committed; a batch that fails is rolled back.
@@ -336,13 +336,12 @@ two `fetch_run` rows.
 
 ## Assumptions
 
-- The maintainer created the B2 account (no card), the bucket and the ETL key, and set
-  `BACKBLAZE_ETL_APP_KEY` (secret), `BACKBLAZE_ETL_KEY_ID` and `BACKBLAZE_ETL_KEY_NAME`
-  (variables) in marola-oods on 2026-10-05. A read-only key for the site build (marola-site) and
-  marola-ml is a later step of the same person ([MIP-0075 §5.6](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#56-what-a-person-sets-up-in-backblaze)).
-- The bucket's lifecycle is "Keep all versions" today. With DuckLake, history is the lake's own
-  snapshots, so the bucket keeps only the last version of each file
-  ([MIP-0075 §4.3](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#43-the-store-backblaze-b2)).
+- The maintainer enables R2, creates the bucket and the ETL token, and sets the
+  `CLOUDFLARE_R2_*` secrets and variables in marola-oods. A read-only token for the site build
+  (marola-site) and marola-ml is a later step of the same person ([MIP-0075 §5.6](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#56-what-a-person-sets-up-in-cloudflare)).
+- R2 keeps no object versions. History is the lake's own snapshots; the catalog's backups are
+  named copies under `catalog/backup/`
+  ([MIP-0075 §4.3](https://github.com/marola-dev/marola/blob/main/docs/MIPs/MIP-0075-water-quality-store-r2.md#43-the-store-cloudflare-r2)).
 - Phase: `docs/PHASES.md` puts a cloud backend in Phase 2. The bucket is free and holds public
   data, but it is still a cloud store; MIP-0075 §11 asks for the scoped exception. [NEEDS
   CLARIFICATION]

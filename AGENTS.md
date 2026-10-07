@@ -40,7 +40,7 @@ commits to it.
   `oods-lake` job. A `v*` tag (a person's act) attaches `marola-oods-lake-<tag>.tar.gz`
   (`release.yml`, `scripts/lake-contract.sh`), which marola-app pins.
 - `.claude/skills/oods-lake/`: the agent skill for operating that lake (inspect, migrate, recover,
-  maintain, B2), ported from licensed skills credited in its `NOTICE.md`; its Safety section is
+  maintain, Cloudflare R2), ported from licensed skills credited in its `NOTICE.md`; its Safety section is
   binding for any agent touching the lake. `scripts/skill-check.sh` (in `just quality`) runs every
   SQL block in it against a fresh local lake.
 

@@ -2,14 +2,14 @@
 # skill-check — the named test of the oods-lake agent skill (#23). It checks:
 #   - SKILL.md's frontmatter and size caps (as gordonmurray/data-engineering-skills'
 #     validate_skills.py): name = the directory, kebab case, ≤ 64 chars; a one-line description
-#     ≤ 1024 chars naming the lake, DuckLake, B2, migrations, maintenance and backups; ≤ 500
+#     ≤ 1024 chars naming the lake, DuckLake, R2, migrations, maintenance and backups; ≤ 500
 #     lines; the sections Inspect first, Decide, Safety, Verify; the six references; relative
 #     links that resolve; only SKILL.md, NOTICE.md, references/ and evals/ in the directory;
 #   - NOTICE.md credits every source issue #23 names, each pinned to a commit with its licence;
 #   - evals/scenarios/ holds at least two scenarios with prompt.txt, scenario.md, skill-sets.yaml;
 #   - every ```sql block in SKILL.md and references/*.md runs on the pinned DuckDB against a fresh
 #     local lake from lake-migrate.sh, seeded with checks.sql's fixtures. A block's first line may
-#     say `-- needs: b2` (skipped and counted), `-- attach: none` (it attaches what it needs), or
+#     say `-- needs: r2` (skipped and counted), `-- attach: none` (it attaches what it needs), or
 #     `-- attach: write` (read-write with DATA_INLINING_ROW_LIMIT 0, the catalog's DATA_PATH); any other block
 #     gets the lake READ_ONLY as `lake`. Blocks run in order, one duckdb process each, from a
 #     directory where the lake sits at .tmp/lake/, with fake OODS_S3_* that must never be printed.
@@ -33,9 +33,9 @@ sources=(
   "backblaze-labs/claude-skill-b2-cloud-storage|MIT"
   "backblaze-labs/b2-mcp|MIT"
 )
-references=(inspect migrations recovery maintenance checks b2)
+references=(inspect migrations recovery maintenance checks r2)
 sections=("Inspect first" "Decide" "Safety" "Verify")
-triggers=(lake DuckLake B2 migration maintenance backup)
+triggers=(lake DuckLake R2 migration maintenance backup)
 
 say() { echo "skill-check: $*" >&2; }
 sql_str() { local s="${1//\'/\'\'}"; printf "'%s'" "$s"; }
@@ -158,7 +158,7 @@ run_sql_file() {
     first="$(head -1 "$file")"
     prelude="SET extension_directory=$(sql_str "$ext_dir"); INSTALL ducklake; LOAD ducklake;"
     case "$first" in
-      "-- needs: b2"*) sql_skipped=$((sql_skipped + 1)); continue ;;
+      "-- needs: r2"*) sql_skipped=$((sql_skipped + 1)); continue ;;
       "-- attach: none"*) ;;
       "-- attach: write"*) prelude+=" ATTACH 'ducklake:.tmp/lake/oods.ducklake' AS lake (DATA_INLINING_ROW_LIMIT 0); USE lake;" ;;
       *) prelude+=" ATTACH 'ducklake:.tmp/lake/oods.ducklake' AS lake (READ_ONLY); USE lake;" ;;
@@ -188,7 +188,7 @@ check_skill() {
   done
   say "$name: $(wc -l <"$skill_dir/SKILL.md") lines, $(wc -c <"$skill_dir/SKILL.md") bytes;" \
     "${#sources[@]} sources checked in NOTICE.md; $eval_count eval scenarios;" \
-    "sql blocks: $sql_ran ran, $sql_skipped skipped (needs: b2)"
+    "sql blocks: $sql_ran ran, $sql_skipped skipped (needs: r2)"
   rm -rf "$work"
   if [ "$errors" -eq 0 ]; then say "$name ok"; else say "$name: $errors failure(s)"; fi
   [ "$errors" -eq 0 ]
@@ -210,7 +210,7 @@ self_test() {
   cat >"$ok/SKILL.md" <<'EOF'
 ---
 name: oods-lake
-description: Operate the OODS lake, a DuckLake on B2: migration, maintenance, backup.
+description: Operate the OODS lake, a DuckLake on R2: migration, maintenance, backup.
 ---
 
 # oods-lake
@@ -233,7 +233,7 @@ INSERT INTO beach VALUES ('floripa', 'Praia Teste', -27.6, -48.4, 1.0);
 ## Safety
 
 ```sql
--- needs: b2
+-- needs: r2
 SELECT * FROM read_blob('s3://no-such-bucket/**');
 ```
 
@@ -245,7 +245,7 @@ SELECT 1;
 ```
 EOF
   check_skill "$ok" 2>"$t/ok.log" || fail "a valid skill failed: $(cat "$t/ok.log")"
-  grep -q 'sql blocks: 3 ran, 1 skipped (needs: b2)' "$t/ok.log" || fail "the counts: $(cat "$t/ok.log")"
+  grep -q 'sql blocks: 3 ran, 1 skipped (needs: r2)' "$t/ok.log" || fail "the counts: $(cat "$t/ok.log")"
 
   # Each defect alone fails, with its message.
   mutate() { # name sed-expression-or-command expected-message
@@ -254,7 +254,7 @@ EOF
     if check_skill "$t/$1/oods-lake" 2>"$t/$1.log"; then fail "$1: passed"; fi
     grep -q -- "$3" "$t/$1.log" || fail "$1: expected '$3' in: $(cat "$t/$1.log")"
   }
-  mutate long-desc "sed -i 's/^description: .*/description: lake DuckLake B2 migration maintenance backup $(printf 'x%.0s' {1..1024})/' SKILL.md" "over 1024"
+  mutate long-desc "sed -i 's/^description: .*/description: lake DuckLake R2 migration maintenance backup $(printf 'x%.0s' {1..1024})/' SKILL.md" "over 1024"
   mutate no-trigger "sed -i 's/backup\.$/./' SKILL.md" "does not name 'backup'"
   mutate no-safety "sed -i 's/^## Safety$/## Rules/' SKILL.md" "no '## Safety' section"
   mutate bad-name "sed -i 's/^name: oods-lake$/name: Oods_Lake/' SKILL.md" "not the directory"
@@ -265,7 +265,7 @@ EOF
   mutate no-notice-row "sed -i '/^| logicalclocks\/hopsworks-api /d' NOTICE.md" "no row for logicalclocks/hopsworks-api"
   mutate unpinned "sed -i 's/dbt-labs\/dbt-agent-skills@[0-9a-f]*/dbt-labs\/dbt-agent-skills@main/' NOTICE.md" "no row for dbt-labs/dbt-agent-skills"
   mutate broken-link "sed -i 's/references\/inspect.md/references\/nope.md/' SKILL.md" "broken link references/nope.md"
-  mutate no-reference "rm references/b2.md" "references/b2.md is missing"
+  mutate no-reference "rm references/r2.md" "references/r2.md is missing"
   mutate one-eval "rm -r evals/scenarios/expire-old-snapshots" "at least 2 expected"
   mutate stray-file "touch notes.txt" "unexpected notes.txt"
 

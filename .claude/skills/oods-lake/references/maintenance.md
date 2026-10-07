@@ -74,9 +74,9 @@ longer than the longest `oods-lake` job, and run it only when none is running.
 
 Show the person, before anything runs: each step, its dry-run output (how many snapshots, which
 paths, how many bytes), what it makes impossible afterwards (time travel before the cut; the
-B2 versions keep deleted Parquet only for the lifecycle window), and the order:
+R2 keeps no deleted object, so a deleted Parquet file is gone), and the order:
 
-1. A copy of the current catalog (B2 keeps it as a version anyway; [recovery.md](recovery.md)).
+1. A copy of the current catalog under `catalog/backup/` ([recovery.md](recovery.md) §3).
 2. `ducklake_expire_snapshots` older than 30 days. *Approval.*
 3. `ducklake_merge_adjacent_files`, only for tables the evidence names. *Approval.*
 4. Upload the catalog, so the bucket's catalog no longer names what step 5 deletes.

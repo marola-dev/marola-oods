@@ -1,6 +1,6 @@
 ---
 name: oods-lake
-description: Operate the OODS lake, the DuckLake on Backblaze B2 that MIP-0075 keeps (catalog/oods.ducklake, Parquet under lake/ in br-open-ocean-data-storage). Inspect it read-only, plan a schema migration with lake-migrate.sh, recover a table or the catalog (time travel, B2 object versions), plan maintenance (expire snapshots, cleanup old files, merge adjacent files), catalog backups, read checks.sql failures, size the bucket against the free tier, review the lifecycle and keys. Use when someone says "the lake looks wrong", "add a migration", "roll back", "restore the catalog", "expire old snapshots", "compact", "clean up", "back up the lake", "how big is the bucket", "B2 lifecycle", "checks.sql fails", or names DuckLake, B2, oods-lake, schema_migration or a snapshot. Not for the ingest code (marola-app's oods module) or data/oods/ (MIP-0056's git store).
+description: Operate the OODS lake, the DuckLake on Cloudflare R2 that MIP-0075 keeps (catalog/oods.ducklake, Parquet under lake/ in br-open-ocean-data-storage). Inspect it read-only, plan a schema migration with lake-migrate.sh, recover a table or the catalog (time travel, catalog backups), plan maintenance (expire snapshots, cleanup old files, merge adjacent files), catalog backups, read checks.sql failures, size the bucket against the free tier, review the lifecycle rule and R2 tokens. Use when someone says "the lake looks wrong", "add a migration", "roll back", "restore the catalog", "expire old snapshots", "compact", "clean up", "back up the lake", "how big is the bucket", "R2 token", "checks.sql fails", or names DuckLake, R2, oods-lake, schema_migration or a snapshot. Not for the ingest code (marola-app's oods module) or data/oods/ (MIP-0056's git store).
 ---
 
 # oods-lake
@@ -8,7 +8,8 @@ description: Operate the OODS lake, the DuckLake on Backblaze B2 that MIP-0075 k
 Ported and adapted from seven MIT/Apache-2.0 skills; [NOTICE.md](NOTICE.md) credits each passage.
 
 The lake is one DuckDB catalog file, `catalog/oods.ducklake`, plus Parquet under `lake/`, both in
-the B2 bucket `br-open-ocean-data-storage` (endpoint `s3.us-east-005.backblazeb2.com`). A job
+the Cloudflare R2 bucket `br-open-ocean-data-storage` (endpoint
+`<ACCOUNT_ID>.r2.cloudflarestorage.com`, region `auto`, path style). A job
 downloads the catalog, commits, and uploads it back, so **there is one writer at a time**: every
 job that writes the lake shares the `oods-lake` concurrency group. `scripts/lake-migrate.sh`
 builds the same lake locally under `.tmp/lake/` from `lake/migrations/`, and that copy is yours
@@ -35,7 +36,7 @@ Queries: [references/inspect.md](references/inspect.md).
 | a new column or table | [migrations](references/migrations.md) | write `NNNN_name.sql`, run it locally, propose the PR |
 | expire, clean up, compact | [maintenance](references/maintenance.md) | evidence, dry run, plan, ask per step |
 | `checks.sql` fails | [checks](references/checks.md) | find the bad rows; fix the data or the view, never the check |
-| restore, backup, lifecycle, keys, size | [b2](references/b2.md), [recovery](references/recovery.md) | read-only listing, then a plan for a person |
+| restore, backup, lifecycle, tokens, size | [r2](references/r2.md), [recovery](references/recovery.md) | read-only listing, then a plan for a person |
 
 ## Safety
 
@@ -45,9 +46,9 @@ Stated once; every reference follows it.
   `aws s3 cp`/`rm`/`put-*` to it, no lifecycle change, no maintenance function against its
   catalog. You write the plan; a person runs it.
 - **Credentials come from the environment only** (`OODS_S3_KEY_ID`, `OODS_S3_SECRET`): never
-  echoed, logged, written to a file, or put in a `PERSISTENT` secret. Never run `b2 key *`,
-  `b2 account get`, or read `~/.b2_account_info`. A key pasted into the chat: say it must be
-  rotated, and do not repeat it.
+  echoed, logged, written to a file, or put in a `PERSISTENT` secret. Never call the Cloudflare
+  API for tokens, run `wrangler login`, or read `~/.wrangler/` or `~/.aws/credentials`. A key
+  pasted into the chat: say the token must be rolled, and do not repeat it.
 - **Inspect with `READ_ONLY`.** Every write attach, local too, passes `DATA_INLINING_ROW_LIMIT 0`.
 - **Destructive steps** (expire, cleanup, orphan delete, a restore, a lifecycle change): the
   dry run first, its output shown, then an explicit "yes" from a person for that step.

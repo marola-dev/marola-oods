@@ -5,7 +5,7 @@ sandbox settings from its `query` skill, "inspect first" from gordonmurray's `ic
 [NOTICE.md](../NOTICE.md)).
 
 Every SQL block below runs in `scripts/skill-check.sh` against a fresh local lake. A block with no
-marker assumes the session below; `-- attach: none` opens its own; `-- needs: b2` needs the bucket
+marker assumes the session below; `-- attach: none` opens its own; `-- needs: r2` needs the bucket
 and is skipped there.
 
 ## Open a session
@@ -35,8 +35,8 @@ a file or a `PERSISTENT` secret:
 
 ```bash
 work="$(mktemp -d)"
-AWS_ACCESS_KEY_ID="$OODS_S3_KEY_ID" AWS_SECRET_ACCESS_KEY="$OODS_S3_SECRET" AWS_DEFAULT_REGION=us-east-005 \
-  aws --endpoint-url https://s3.us-east-005.backblazeb2.com \
+AWS_ACCESS_KEY_ID="$OODS_S3_KEY_ID" AWS_SECRET_ACCESS_KEY="$OODS_S3_SECRET" AWS_DEFAULT_REGION=auto \
+  aws --endpoint-url "https://$OODS_S3_ENDPOINT" \
   s3 cp --only-show-errors s3://br-open-ocean-data-storage/catalog/oods.ducklake "$work/oods.ducklake"
 ```
 
@@ -47,19 +47,19 @@ and `duckdb_secrets()` shows it redacted:
 -- attach: none
 INSTALL httpfs; LOAD httpfs;
 CREATE SECRET oods (TYPE s3, KEY_ID getenv('OODS_S3_KEY_ID'), SECRET getenv('OODS_S3_SECRET'),
-  ENDPOINT 's3.us-east-005.backblazeb2.com', REGION 'us-east-005', URL_STYLE 'vhost',
+  ENDPOINT getenv('OODS_S3_ENDPOINT'), REGION 'auto', URL_STYLE 'path',
   SCOPE 's3://br-open-ocean-data-storage');
 SELECT name, persistent, scope FROM duckdb_secrets();
 ```
 
 ```sql
--- needs: b2
+-- needs: r2
 ATTACH 'ducklake:<work_dir>/oods.ducklake' AS lake (READ_ONLY);  -- <work_dir>: the download directory above
 SELECT count(*) FROM lake.snapshots();
 ```
 
-The ETL's store uses `URL_STYLE 'vhost'`; whether DuckDB's httpfs reaches B2 with `vhost`, or
-needs `path`, is not tested live yet.
+`OODS_S3_ENDPOINT` is `<ACCOUNT_ID>.r2.cloudflarestorage.com`, without `https://`; the ETL's
+store uses the same secret. A real read from R2 is not tested live yet.
 
 ## Snapshots and schema version
 

@@ -21,7 +21,7 @@ it on the next push or PR touching `data/` or `marola-image`.
 
 ## The lake schema
 
-The DuckLake that MIP-0075 keeps on Backblaze B2 gets its tables from numbered migrations in
+The DuckLake that MIP-0075 keeps on Cloudflare R2 gets its tables from numbered migrations in
 `lake/migrations/`, next to `lake/views.sql` and `lake/checks.sql`: together, the lake's
 contract. `0001_init.sql` creates MIP-0075 §5.2's nine tables (`beach`, `facility`, `trail`,
 `source`, `point`, `sample`, `water_position`, `fetch_partition`, `fetch_run`), partitions
@@ -85,10 +85,10 @@ next `oods-lake` job migrates the catalog.
 [`.claude/skills/oods-lake/`](https://github.com/marola-dev/marola-oods/tree/main/.claude/skills/oods-lake)
 gives an agent the lake's operational know-how: inspect read-only, plan a migration, recover a
 table or the catalog, plan maintenance, back up the catalog, read a `checks.sql` failure, and
-review the bucket's lifecycle, keys and size. `SKILL.md` is short (Inspect first, Decide, Safety,
-Verify) and loads `references/{inspect,migrations,recovery,maintenance,checks,b2}.md` on demand.
-It is ported from MIT and Apache-2.0 skills by DuckDB, MotherDuck, Backblaze, dbt Labs,
-Hopsworks and gordonmurray; its `NOTICE.md` credits each passage, pinned to a commit.
+review the bucket's lifecycle rule, R2 tokens and size. `SKILL.md` is short (Inspect first, Decide, Safety,
+Verify) and loads `references/{inspect,migrations,recovery,maintenance,checks,r2}.md` on demand.
+It is ported from MIT and Apache-2.0 skills by DuckDB, MotherDuck, Backblaze (its safety rules,
+re-pointed to R2), dbt Labs, Hopsworks and gordonmurray; its `NOTICE.md` credits each passage, pinned to a commit.
 
 Its one rule set: an agent never writes the bucket (no workflow dispatch, no catalog upload), takes credentials only from `OODS_S3_*`, attaches `READ_ONLY` to
 inspect, passes `DATA_INLINING_ROW_LIMIT 0` on every write attach, dry-runs and asks before
@@ -102,6 +102,6 @@ scripts/skill-check.sh --self-test    # each defect it should catch, caught
 `skill-check.sh` checks the frontmatter and size caps, that `NOTICE.md` credits every source,
 the two eval scenarios in `evals/scenarios/`, and runs every ```` ```sql ```` block in the skill
 against a fresh local lake from `lake-migrate.sh`, seeded with `checks.sql`'s fixtures. A block
-whose first line is `-- needs: b2` is skipped and counted; `-- attach: write` gets the lake
+whose first line is `-- needs: r2` is skipped and counted; `-- attach: write` gets the lake
 read-write, `-- attach: none` attaches its own; any other block gets it `READ_ONLY`. A changed
 DuckDB or DuckLake that breaks a documented query fails `just quality`.

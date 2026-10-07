@@ -42,7 +42,7 @@ lake/                                the lake's contract, shipped to marola-app 
   checks.sql                         the executable acceptance checks (oods check)
 scripts/lake-migrate.sh              applies pending migrations and views.sql to a local lake
 scripts/lake-contract.sh             lake/ as marola-oods-lake-<tag>.tar.gz (release.yml)
-.claude/skills/oods-lake/            the agent skill for operating the lake: inspect, migrate, recover, maintain, B2
+.claude/skills/oods-lake/            the agent skill for operating the lake: inspect, migrate, recover, maintain, R2
 scripts/skill-check.sh               the skill's test: caps, attribution, evals, every SQL block on a local lake
 ```
 

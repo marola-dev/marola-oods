@@ -31,5 +31,5 @@ attach the bucket's catalog read-write, echo `OODS_S3_SECRET`, or edit `checks.s
 - **Handoff**: the plan says who runs it and when (no `oods-lake` job running).
 
 ## Prerequisites
-DuckDB 1.5.5 (`nix develop`) and the `ducklake` extension in `.tmp/duckdb-ext`; no network to B2
+DuckDB 1.5.5 (`nix develop`) and the `ducklake` extension in `.tmp/duckdb-ext`; no network to R2
 needed, and none should be used for a write.

@@ -1,12 +1,12 @@
 name: notify umbrella
 
-# The umbrella aggregates this repo's README.md and docs/ into docs.marola.dev (MIP-0070 §5.5).
+# Every push to main tells the umbrella: submodule-updated, so pointer-sync moves this repo's
+# pointer, and submodule-docs-updated too when README.md or docs/ changed (MIP-0076 §5.5).
 # No token set: a notice, and the umbrella's daily cron picks the change up.
 
 on:
   push:
     branches: [main]
-    paths: [README.md, "docs/**"]
 
 permissions: {}
 

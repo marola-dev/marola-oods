@@ -11,15 +11,15 @@ permissions:
 jobs:
   body:
     if: github.event.action != 'closed'
-    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.7.0
+    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.8.0
     permissions:
       contents: read
       pull-requests: write
     with:
-      devkit-ref: v0.7.0
+      devkit-ref: v0.8.0
 
   short-circuit:
     if: github.event.action == 'closed' && !github.event.pull_request.merged
-    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.7.0
+    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.8.0
     permissions:
       actions: write

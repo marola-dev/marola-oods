@@ -70,3 +70,5 @@ workflow.
   MIP-0056 lands, and how to bump the pinned image.
 - [AGENTS.md](https://github.com/marola-dev/marola-oods/blob/main/AGENTS.md): what this repo is
   and where it differs from the umbrella's rules.
+- [`oods-lake-reviewer`](https://github.com/marola-dev/marola-oods/blob/main/.claude/agents/oods-lake-reviewer.md):
+  the agent that reviews a MIP-0075 diff against the lake's rules before it is marked ready.

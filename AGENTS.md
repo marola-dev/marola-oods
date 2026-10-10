@@ -32,6 +32,9 @@ commits to it.
   sbt module (MIP-0056 §5.2). This repo has no build, no sbt, no Python pipeline of its own.
 - `scripts/oods-tree-check.sh`: every file under `data/oods/` other than `.gitkeep` is one of the
   formats MIP-0056 specifies (`.md`, `.json`, `.jsonl`, `.csv`, `.parquet`).
+- `.claude/agents/oods-lake-reviewer.md`: a read-only reviewer of MIP-0075 diffs (this repo's
+  workflows and `lake/`, or marola-app's `oods` module) against the rules that keep the lake from
+  losing data; run it before such a PR is marked ready.
 - `scripts/app-image.sh`: the pinned app image in `marola-image`, the same pin shape marola-site
   and marola-ml use.
 

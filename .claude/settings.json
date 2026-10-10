@@ -5,7 +5,7 @@
     "sessionUrl": false
   },
   "extraKnownMarketplaces": {
-    "marola-devkit": { "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.8.1" } }
+    "marola-devkit": { "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.8.2" } }
   },
   "enabledPlugins": { "marola-devkit@marola-devkit": true },
   "permissions": {

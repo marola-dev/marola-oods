@@ -17,16 +17,16 @@ concurrency:
 
 jobs:
   static:
-    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.8.0
+    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.8.1
     with:
       shellcheck-files: scripts/*.sh
       extra-commands: |
         scripts/oods-tree-check.sh
         scripts/oods-tree-check.sh --self-test
         scripts/app-image.sh --self-test
-        git -c advice.detachedHead=false clone -q --depth 1 -b v0.8.0 https://github.com/marola-dev/marola-devkit /tmp/devkit && python3 /tmp/devkit/scripts/docs_lint.py .
+        git -c advice.detachedHead=false clone -q --depth 1 -b v0.8.1 https://github.com/marola-dev/marola-devkit /tmp/devkit && python3 /tmp/devkit/scripts/docs_lint.py .
 
   agents:
-    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.8.0
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.8.1
     with:
-      devkit-ref: v0.8.0
+      devkit-ref: v0.8.1

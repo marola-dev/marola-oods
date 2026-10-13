@@ -5,7 +5,7 @@
     "sessionUrl": false
   },
   "extraKnownMarketplaces": {
-    "marola-devkit": { "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.8.3" } }
+    "marola-devkit": { "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.9.0" } }
   },
   "enabledPlugins": { "marola-devkit@marola-devkit": true },
   "permissions": {
@@ -22,7 +22,6 @@
       "Bash(just oods-tree-check*)",
       "Bash(just app-image*)",
       "Bash(uprd:*)",
-      "Bash(cost-split:*)",
       "Bash(scripts/oods-tree-check.sh*)",
       "Bash(scripts/app-image.sh*)",
       "Bash(git status*)",

@@ -22,7 +22,6 @@
       "Bash(just oods-tree-check*)",
       "Bash(just app-image*)",
       "Bash(uprd:*)",
-      "Bash(cost-split:*)",
       "Bash(scripts/oods-tree-check.sh*)",
       "Bash(scripts/app-image.sh*)",
       "Bash(git status*)",

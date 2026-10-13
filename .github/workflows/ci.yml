@@ -30,3 +30,20 @@ jobs:
     uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.9.0
     with:
       devkit-ref: v0.9.0
+
+  # The one check ci-rule requires in every marola repo (marola-dev/marola#813); it must report on
+  # every run, so it needs every other job and passes on skipped ones.
+  ci-ok:
+    if: always()
+    needs: [static, agents]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: every needed job passed or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for r in $RESULTS; do
+            case "$r" in success|skipped) ;; *) echo "::error::a needed job ended $r"; exit 1 ;; esac
+          done

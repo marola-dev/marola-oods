@@ -39,7 +39,10 @@
       "Bash(gh pr close*)",
       "Bash(gh release*)",
       "Bash(git tag*)",
-      "Bash(git push --tags*)"
+      "Bash(git push --tags*)",
+      "Bash(gh stack merge*)",
+      "Bash(gh stack unstack*)",
+      "Bash(gh stack delete*)"
     ]
   }
 }

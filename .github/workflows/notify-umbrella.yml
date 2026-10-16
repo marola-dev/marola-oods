@@ -2,7 +2,7 @@ name: notify umbrella
 
 # Every push to main tells the umbrella: submodule-updated, so pointer-sync moves this repo's
 # pointer, and submodule-docs-updated too when README.md or docs/ changed (MIP-0076 §5.5).
-# No token set: a notice, and the umbrella's daily cron picks the change up.
+# No PR_BOT_KEY set: a notice, and the umbrella's daily cron picks the change up.
 
 on:
   push:
@@ -14,4 +14,4 @@ jobs:
   notify:
     uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.12.0
     secrets:
-      token: ${{ secrets.MAROLA_CROSS_REPO_PAT }}
+      pr_bot_key: ${{ secrets.PR_BOT_KEY }}

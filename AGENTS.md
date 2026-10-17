@@ -42,6 +42,7 @@ commits to it.
 | app → oods | marola-app's `oods-ingest.yml` commits new raw/Parquet files here, filtered by state/city/source (MIP-0056 §5.4) |
 | oods → app | `MAROLA_WATER_CACHE_DIR=marola-oods/data/oods/latest`, once the app's opt-in export lands (MIP-0056 §5.5) |
 | oods → umbrella | `README.md` and `docs/`, aggregated into docs.marola.dev (`notify-umbrella.yml`) |
+| oods → devkit | `bump-ready` when a devkit bump PR's CI ends green (`bump-ready.yml`) |
 | app → oods-check | `marola-image`: the pinned app image this repo's own CI pulls and smoke-tests, never builds |
 
 No workflow here writes to this repo. `oods-check.yml` only pulls and runs the pinned app image

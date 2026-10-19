@@ -60,6 +60,11 @@ just app-image            # print the pinned app image
 The devkit's git hooks (`core.hooksPath .devkit/.githooks`, set by the dev shell) run
 `just precommit` and `just prepush`.
 
+Where something lives across repos: `python3 .claude/skills/routing/scripts/route.py query
+"<identifiers>"`, or `route.py wiring <term>` for what produces, pins or reads an artifact or a
+dispatch. It is the vendored `routing` skill, which reads the umbrella's CI-built bundle with no
+Nix (MIP-0084); a known keyword is `git grep`.
+
 ## Docs
 
 `README.md` is the landing: what this repo is, its status, how to try it, the repo map and its

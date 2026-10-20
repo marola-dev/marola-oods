@@ -12,8 +12,8 @@ permissions:
 jobs:
   gemini:
     if: github.event.requested_team.slug == 'gemini'
-    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.20.2
+    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.20.3
     secrets: inherit
     with:
-      devkit-ref: v0.20.2
+      devkit-ref: v0.20.3
       check-command: bash scripts/oods-tree-check.sh

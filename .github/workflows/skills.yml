@@ -13,8 +13,8 @@ permissions:
 
 jobs:
   update:
-    uses: marola-dev/marola-devkit/.github/workflows/skills-update.yml@v0.20.2
+    uses: marola-dev/marola-devkit/.github/workflows/skills-update.yml@v0.20.3
     with:
-      devkit-ref: v0.20.2
+      devkit-ref: v0.20.3
     secrets:
       pr_bot_key: ${{ secrets.PR_BOT_KEY }}
